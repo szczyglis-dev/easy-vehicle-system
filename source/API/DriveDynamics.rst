@@ -1,0 +1,1011 @@
+.. _evs-api-drivedynamics--engine-and-drivetrain-api:
+
+Engine and drivetrain API
+=========================
+
+Read :doc:`the system explanation </Scripting/DriveDynamics>` for composition, setup and worked examples. This reference lists public members declared by each package type. Base-type links identify inherited contracts; the topic's method index also includes the relevant package base methods. Unity framework methods inherited from ``MonoBehaviour``, ``Object`` or ``ScriptableObject`` are documented by Unity.
+
+.. _evs-api-drivedynamics--types:
+
+Types
+-----
+
+-  :ref:`AutomaticGearbox <evs-api-drivedynamics--automaticgearbox>`
+-  :ref:`Brakes <evs-api-drivedynamics--brakes>`
+-  :ref:`Clutch <evs-api-drivedynamics--clutch>`
+-  :ref:`Differential <evs-api-drivedynamics--differential>`
+-  :ref:`Differential.Axle <evs-api-drivedynamics--differentialaxle>`
+-  :ref:`DifferentialMode <evs-api-drivedynamics--differentialmode>`
+-  :ref:`DrivingAssists <evs-api-drivedynamics--drivingassists>`
+-  :ref:`Engine <evs-api-drivedynamics--engine>`
+-  :ref:`EngineCore <evs-api-drivedynamics--enginecore>`
+-  :ref:`EngineModule <evs-api-drivedynamics--enginemodule>`
+-  :ref:`Gearbox <evs-api-drivedynamics--gearbox>`
+-  :ref:`ManualGearbox <evs-api-drivedynamics--manualgearbox>`
+-  :ref:`MotorcycleBalance <evs-api-drivedynamics--motorcyclebalance>`
+-  :ref:`ParkingHold <evs-api-drivedynamics--parkinghold>`
+-  :ref:`Steering <evs-api-drivedynamics--steering>`
+-  :ref:`TractionControl <evs-api-drivedynamics--tractioncontrol>`
+-  :ref:`Transmission <evs-api-drivedynamics--transmission>`
+-  :ref:`TransmissionMode <evs-api-drivedynamics--transmissionmode>`
+
+.. _evs-api-drivedynamics--automaticgearbox:
+
+AutomaticGearbox
+----------------
+
+**Runtime/Engine/Gearbox/AutomaticGearbox.cs**
+
+Makes automatic shift decisions from operating conditions.
+
+**Inherits / implements:** :ref:`Gearbox <evs-api-drivedynamics--gearbox>`.
+
+.. _evs-api-drivedynamics--state-and-configuration:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| Member                                               | Meaning                                                                                                                     |
++======================================================+=============================================================================================================================+
+| ``public float upshiftRpm``                          | Authored upshift rpm used by ``AutomaticGearbox``. Initial value: ``7000``.                                                 |
++------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float downshiftRpm``                        | Authored downshift rpm used by ``AutomaticGearbox``. Initial value: ``2500``.                                               |
++------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float minimumGearTime``                     | Authored minimum gear time used by ``AutomaticGearbox``. Initial value: ``0.7f``.                                           |
++------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float reverseEngageSpeedKph``               | Maximum speed treated as standstill for automatic reverse selection (km/h); allows small suspension/creep motion on slopes. |
++------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool AutomaticDirection { get; }`` | Read-only/resolved automatic direction for ``AutomaticGearbox``.                                                            |
++------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--brakes:
+
+Brakes
+------
+
+**Runtime/Drive/Brakes/Brakes.cs**
+
+Configuration/implementation type for brakes within engine and drivetrain.
+
+**Inherits / implements:** :ref:`DriveModule <evs-api-driveprofiles--drivemodule>`.
+
+.. _evs-api-drivedynamics--methods:
+
+Methods
+~~~~~~~
+
++-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                               | Role and behavior                                                                                                | Arguments and result                                                                                                                                            |
++=========================================================================+==================================================================================================================+=================================================================================================================================================================+
+| ``public override void Configure(VehicleController v)``                 | Resolves an Engine reference only when no explicit engine is assigned.                                           | ``v`` — V, interpreted by this operation in the declared type.                                                                                                  |
++-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController v, Command c, float dt)`` | Resolves signed-pedal direction/braking policy, publishes actuator demand and applies service/handbrake torques. | ``v`` — V, interpreted by this operation in the declared type. ``c`` — C, interpreted by this operation in the declared type. ``dt`` — Elapsed time in seconds. |
++-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``          | Checks movement-family compatibility; this is independent of the Unity enabled flag.                             | ``profile`` — Movement/surface configuration, according to its declared type. **Returns:** ``true`` when the described condition holds; ``false`` otherwise.    |
++-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--events-and-inspector-callbacks:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++-----------------------------------------------------------+-----------------------------------------------------------------------------------+
+| Declaration                                               | Trigger, payload and meaning                                                      |
++===========================================================+===================================================================================+
+| ``public event System.Action<float> ServiceBrakeChanged`` | When resolved service braking changes. Payload: normalized resolved brake demand. |
++-----------------------------------------------------------+-----------------------------------------------------------------------------------+
+| ``public event System.Action<bool> HandbrakeChanged``     | When resolved handbrake state changes. Payload: bool.                             |
++-----------------------------------------------------------+-----------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-1:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                                        | Meaning                                                                                                                                        |
++===============================================================+================================================================================================================================================+
+| ``public override int ExecutionOrder { get; }``               | Default local priority within phase/category.                                                                                                  |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }``             | Cross-category execution barrier used by the module pipeline.                                                                                  |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float handbrakeTorque``                              | Authored handbrake torque used by Brakes. Initial value: ``6000``.                                                                             |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool progressiveDigitalBraking``                     | Ramp button/keyboard service braking. Analog pedals always use their exact input strength.                                                     |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float brakeRiseTime``                                | Seconds for a held digital brake to reach full service-brake strength. Zero is immediate.                                                      |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float slopeReverseReleaseGrace``                     | Seconds to recognize a fresh reverse press after releasing a stopped brake on a slope. Does not engage reverse from a continuously held brake. |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float DigitalBrakeStrength { get; }``        | Read-only/resolved digital brake strength for Brakes.                                                                                          |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float ServiceBrake { get; protected set; }`` | Resolved service-brake demand consumed by downstream mechanics and pedal presentation.                                                         |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool Handbrake { get; protected set; }``     | Read-only/resolved handbrake for Brakes.                                                                                                       |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float rollingBrakeTorque``                           | Optional constant brake torque while coasting. Zero allows natural downhill rolling.                                                           |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Engine engine``                                      | Optional explicit link when engine and brakes live on different objects.                                                                       |
++---------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--clutch:
+
+Clutch
+------
+
+**Runtime/Engine/Gearbox/Clutch.cs**
+
+Models coupling and finite rotational energy transfer.
+
+**Inherits / implements:** :ref:`EngineModule <evs-api-drivedynamics--enginemodule>`.
+
+.. _evs-api-drivedynamics--methods-1:
+
+Methods
+~~~~~~~
+
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                                                  | Role and behavior                                                                                        | Arguments and result                                                                                                                                                                                                     |
++============================================================================================+==========================================================================================================+==========================================================================================================================================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``                              | Resolves the engine only when no explicit reference is assigned.                                         | ``vehicle`` — Vehicle context/owner receiving the operation.                                                                                                                                                             |
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Advances manual/automatic coupling and publishes ``EngagementChanged`` after a resolved coupling change. | ``vehicle`` — Vehicle context/owner receiving the operation. ``command`` — Command sampled for this tick; use its channel metadata as well as axes. ``deltaTime`` — Elapsed time in seconds supplied by the owning loop. |
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetAutomatic(bool value)``                                           | Chooses automatic clutch assistance rather than manual engagement ownership.                             | ``value`` — Requested bool state for this operation.                                                                                                                                                                     |
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetManualEngagement(float value)``                                   | Requests normalized manual clutch coupling, distinct from clutch pedal travel.                           | ``value`` — Requested state/value in this operation's domain; use its configured range/unit.                                                                                                                             |
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--events-and-inspector-callbacks-1:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| Declaration                                             | Trigger, payload and meaning                                                                       |
++=========================================================+====================================================================================================+
+| ``public event System.Action<float> EngagementChanged`` | When resolved clutch coupling changes. Payload: normalized engagement, distinct from pedal travel. |
++---------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public event System.Action<bool> AutomaticChanged``   | When automatic clutch assistance selection changes. Payload: bool.                                 |
++---------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-2:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| Member                                                      | Meaning                                                                                            |
++=============================================================+====================================================================================================+
+| ``public bool automatic``                                   | Assist normal launches/coasting. Touching the clutch pedal always gives the driver direct control. |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public float torqueCapacity``                             | Maximum crankshaft torque transmitted by a fully engaged clutch, in Nm.                            |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public bool allowLaunchWheelspin``                        | Let stored flywheel energy briefly exceed traction control's propulsion budget on a clutch launch. |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public virtual float Pedal { get; protected set; }``      | Clutch pedal travel: zero released, one fully pressed; opposite direction to engagement.           |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public virtual bool DriverControlled { get; }``           | Whether manual mode or a pedal override currently controls clutch engagement.                      |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public virtual float SlipRpm { get; }``                   | Engine RPM minus gearbox-reflected wheel RPM; measures coupling slip.                              |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public float manualEngagement``                           | Authored manual engagement used by Clutch. Initial value: ``1``.                                   |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public float engagementRate``                             | Automatic assistance only. Driver pedal/button input is applied immediately.                       |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public float engineBrakingTorque``                        | Authored engine braking torque used by Clutch. Initial value: ``35``.                              |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public Engine engine``                                    | Authored engine used by Clutch.                                                                    |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public virtual float Engagement { get; protected set; }`` | Resolved clutch coupling fraction: zero disconnected, one connected.                               |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public override int ExecutionOrder { get; }``             | Default local priority within phase/category.                                                      |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }``           | Cross-category execution barrier used by the module pipeline.                                      |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--differential:
+
+Differential
+------------
+
+**Runtime/Engine/Drivetrain/Differential.cs**
+
+Distributes driven axle torque.
+
+**Inherits / implements:** :ref:`EngineModule <evs-api-drivedynamics--enginemodule>`.
+
+.. _evs-api-drivedynamics--methods-2:
+
+Methods
+~~~~~~~
+
++-------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                               | Role and behavior                                                                                      | Arguments and result                                                                                                                                            |
++=========================================================================+========================================================================================================+=================================================================================================================================================================+
+| ``public override void Step(VehicleController v, Command c, float dt)`` | Distributes axle torque and bounded shaft coupling; skips adding propulsion while service/handbraking. | ``v`` — V, interpreted by this operation in the declared type. ``c`` — C, interpreted by this operation in the declared type. ``dt`` — Elapsed time in seconds. |
++-------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``          | Checks movement-family compatibility; this is independent of the Unity enabled flag.                   | ``profile`` — Movement/surface configuration, according to its declared type. **Returns:** ``true`` when the described condition holds; ``false`` otherwise.    |
++-------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-3:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| Member                                            | Meaning                                                                              |
++===================================================+======================================================================================+
+| ``public DifferentialMode mode``                  | Authored mode used by Differential. Initial value: ``DifferentialMode.LimitedSlip``. |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public Axle[] axles``                           | Authored axles used by Differential. Initial value: ``Array.Empty<Axle>()``.         |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public float torqueBiasRatio``                  | Authored torque bias ratio used by Differential. Initial value: ``3``.               |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public float slipRpmRange``                     | Authored slip rpm range used by Differential. Initial value: ``150``.                |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public float lockedCoupling``                   | Authored locked coupling used by Differential. Initial value: ``4``.                 |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public float maximumLockTorque``                | Authored maximum lock torque used by Differential. Initial value: ``1000``.          |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public float tractionCoefficient``              | Authored traction coefficient used by Differential. Initial value: ``1``.            |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public override int ExecutionOrder { get; }``   | Default local priority within phase/category.                                        |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }`` | Cross-category execution barrier used by the module pipeline.                        |
++---------------------------------------------------+--------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--differentialaxle:
+
+Differential.Axle
+-----------------
+
+**Runtime/Engine/Drivetrain/Differential.cs**
+
+Configuration/implementation type for axle within engine and drivetrain.
+
+.. _evs-api-drivedynamics--state-and-configuration-4:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------+---------------------------------------------------------+
+| Member                          | Meaning                                                 |
++=================================+=========================================================+
+| ``public string label``         | Authored label used by Axle. Initial value: ``"Axle"``. |
++---------------------------------+---------------------------------------------------------+
+| ``public bool enabled``         | Authored enabled used by Axle. Initial value: ``true``. |
++---------------------------------+---------------------------------------------------------+
+| ``public WheelCollider first``  | Authored first used by Axle.                            |
++---------------------------------+---------------------------------------------------------+
+| ``public WheelCollider second`` | Authored second used by Axle.                           |
++---------------------------------+---------------------------------------------------------+
+
+.. _evs-api-drivedynamics--differentialmode:
+
+DifferentialMode
+----------------
+
+**Runtime/Engine/Drivetrain/Differential.cs**
+
+Defines the allowed differential mode choices used by this topic.
+
+.. _evs-api-drivedynamics--values:
+
+Values
+~~~~~~
+
+-  ``Open``
+-  ``LimitedSlip``
+-  ``Locked``
+
+.. _evs-api-drivedynamics--drivingassists:
+
+DrivingAssists
+--------------
+
+**Runtime/Drive/Core/DrivingAssists.cs**
+
+Configuration/implementation type for driving assists within engine and drivetrain.
+
+**Inherits / implements:** :ref:`DriveModule <evs-api-driveprofiles--drivemodule>`.
+
+.. _evs-api-drivedynamics--methods-3:
+
+Methods
+~~~~~~~
+
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                                                  | Role and behavior                                                                                                                              | Arguments and result                                                                                                                                                                                                     |
++============================================================================================+================================================================================================================================================+==========================================================================================================================================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``                              | Caches the vehicle and applies its coordinated assist choices.                                                                                 | ``vehicle`` — Vehicle context/owner receiving the operation.                                                                                                                                                             |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Applies the coordinator's current traction/stability choices to its connected mechanics.                                                       | ``vehicle`` — Vehicle context/owner receiving the operation. ``command`` — Command sampled for this tick; use its channel metadata as well as axes. ``deltaTime`` — Elapsed time in seconds supplied by the owning loop. |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Apply()``                                                            | Writes coordinated traction/stability assist choices to the connected mechanics. Disabling the coordinator does not restore previous settings. | No arguments; no returned value.                                                                                                                                                                                         |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetTractionControl(bool value)``                                     | Changes the coordinated traction-control choice through ``DrivingAssists``.                                                                    | ``value`` — Requested bool state for this operation.                                                                                                                                                                     |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetStabilityControl(bool value)``                                    | Changes the coordinated stability-assistance choice.                                                                                           | ``value`` — Requested bool state for this operation.                                                                                                                                                                     |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetAssistsEnabled(bool value)``                                      | Applies the application's combined assist enable choice through ``DrivingAssists``.                                                            | ``value`` — Requested bool state for this operation.                                                                                                                                                                     |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--events-and-inspector-callbacks-2:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++--------------------------------------------------------------+-----------------------------------------------------------------------------------------+
+| Declaration                                                  | Trigger, payload and meaning                                                            |
++==============================================================+=========================================================================================+
+| ``public event System.Action<bool> TractionControlChanged``  | When ``DrivingAssists`` changes its coordinated traction-control choice. Payload: bool. |
++--------------------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public event System.Action<bool> StabilityControlChanged`` | When ``DrivingAssists`` changes its stability-assistance choice. Payload: bool.         |
++--------------------------------------------------------------+-----------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-5:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| Member                                            | Meaning                                                                                 |
++===================================================+=========================================================================================+
+| ``public bool tractionControlEnabled``            | Authored traction control enabled used by ``DrivingAssists``. Initial value: ``true``.  |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public bool stabilityControlEnabled``           | Authored stability control enabled used by ``DrivingAssists``. Initial value: ``true``. |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float stabilityStrength``                | Authored stability strength used by ``DrivingAssists``. Initial value: ``.70f``.        |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float yawResponse``                      | Authored yaw response used by ``DrivingAssists``. Initial value: ``7``.                 |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float lateralResponse``                  | Authored lateral response used by ``DrivingAssists``. Initial value: ``4``.             |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float maximumYawRate``                   | Upper requested yaw rate used by turning assistance, in rad/s.                          |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public bool stabilizePoweredSlides``            | Authored stabilize powered slides used by ``DrivingAssists``. Initial value: ``true``.  |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float launchReferenceSpeed``             | Authored launch reference speed used by ``DrivingAssists``. Initial value: ``3``.       |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float targetSlip``                       | Authored target slip used by ``DrivingAssists``. Initial value: ``.22f``.               |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float tractionReserve``                  | Authored traction reserve used by ``DrivingAssists``. Initial value: ``.9f``.           |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float corneringFreedom``                 | Authored cornering freedom used by ``DrivingAssists``. Initial value: ``.65f``.         |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float reductionRate``                    | Authored reduction rate used by ``DrivingAssists``. Initial value: ``12``.              |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float recoveryRate``                     | Authored recovery rate used by ``DrivingAssists``. Initial value: ``1.8f``.             |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public float minimumTorqueScale``               | Authored minimum torque scale used by ``DrivingAssists``. Initial value: ``.08f``.      |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public bool reserveGripForCornering``           | Authored reserve grip for cornering used by ``DrivingAssists``.                         |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }`` | Cross-category execution barrier used by the module pipeline.                           |
++---------------------------------------------------+-----------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--engine:
+
+Engine
+------
+
+**Runtime/Engine/Engine.cs**
+
+Resolves running state, RPM and propulsion torque/power.
+
+**Inherits / implements:** :ref:`EngineModule <evs-api-drivedynamics--enginemodule>`.
+
+.. _evs-api-drivedynamics--methods-4:
+
+Methods
+~~~~~~~
+
++-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                               | Role and behavior                                                                                                         | Arguments and result                                                                                                                                            |
++=========================================================================+===========================================================================================================================+=================================================================================================================================================================+
+| ``public virtual void ResetState()``                                    | Clears the declaring mechanic's retained simulation history at an explicit reset boundary.                                | No arguments; no returned value.                                                                                                                                |
++-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Configure(VehicleController vehicle)``           | Caches the owner, synchronizes running state, configures registered gearboxes and resolves missing drivetrain references. | ``vehicle`` — Vehicle context/owner receiving the operation.                                                                                                    |
++-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController v, Command c, float dt)`` | Resolves running state, demand, RPM and torque output; stopped engines clear their propulsion state.                      | ``v`` — V, interpreted by this operation in the declared type. ``c`` — C, interpreted by this operation in the declared type. ``dt`` — Elapsed time in seconds. |
++-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void StartEngine()``                                   | Requests ignition, respecting the active fuel/engine policy.                                                              | No arguments; no returned value.                                                                                                                                |
++-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void StopEngine()``                                    | Requests engine shutdown and running-state notifications.                                                                 | No arguments; no returned value.                                                                                                                                |
++-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void ToggleEngine()``                                  | Requests the opposite engine-running state through ignition/shutdown policy.                                              | No arguments; no returned value.                                                                                                                                |
++-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetEngineRunning(bool running)``                  | Requests the engine running state through ignition/fuel policy and transition notifications.                              | ``running`` — Requested running state.                                                                                                                          |
++-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--events-and-inspector-callbacks-3:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Declaration                                             | Trigger, payload and meaning                                                                                      |
++=========================================================+===================================================================================================================+
+| ``public event System.Action<bool> EngineStateChanged`` | After engine running state changes. Payload: running bool; a rejected start does not report success.              |
++---------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<int> GearChanged``         | After accepted gear selection. Payload: signed gear index, with reverse -1, neutral 0 and forward gears positive. |
++---------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-6:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| Member                                                                   | Meaning                                                                                                                     |
++==========================================================================+=============================================================================================================================+
+| ``public virtual bool EngineRunning { get; }``                           | Read-only/resolved engine running for Engine.                                                                               |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool IsRunning { get; }``                               | Current is running predicate; read it instead of maintaining a second application flag.                                     |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public override int ExecutionOrder { get; }``                          | Default local priority within phase/category.                                                                               |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }``                        | Cross-category execution barrier used by the module pipeline.                                                               |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public Gearbox gearbox``                                               | Optional plugin. Missing or disabled gearbox uses the original direct drive.                                                |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public Clutch clutch``                                                 | Authored clutch used by Engine.                                                                                             |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float maximumPowerKw``                                          | Maximum output power in ``kW``; zero disables the power cap.                                                                |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float maximumDriveAcceleration``                                | Maximum propulsion acceleration in m/s²; zero disables this torque limit.                                                   |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float idleRpm``                                                 | Authored idle rpm used by Engine. Initial value: ``900``.                                                                   |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float maxRpm``                                                  | Authored max rpm used by Engine. Initial value: ``8000``.                                                                   |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float peakTorque``                                              | Peak crankshaft combustion torque before ratio multiplication, in N·m.                                                      |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float launchRpm``                                               | Authored launch rpm used by Engine. Initial value: ``3200``.                                                                |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float rpmResponse``                                             | Authored rpm response used by Engine. Initial value: ``10``.                                                                |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float shiftRpmResponse``                                        | RPM response per second while shifting. Lower values give a slower RPM drop, independently of vehicle type.                 |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float rotationalInertia``                                       | Engine/flywheel rotational inertia in kg m², used when the driver operates the clutch.                                      |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float internalFriction``                                        | Fraction of peak torque lost to internal friction at maximum RPM with a driver-controlled clutch.                           |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float launchBlendSpeed``                                        | Forward speed in m/s at which launch RPM support fully fades to idle RPM.                                                   |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float revLimiterRange``                                         | RPM range over which the coupled shaft rev limiter fades propulsion torque.                                                 |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float speedLimiterRangeKph``                                    | Road-speed range in km/h over which propulsion fades near the top speed.                                                    |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float directSpeedLimiterRangeKph``                              | Additional speed fade range in km/h used by direct drive.                                                                   |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float airborneTorqueWeight``                                    | Relative torque weight of airborne wheels when other driven wheels have contact. One disables contact-based redistribution. |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float InertialDriveTorque { get; protected set; }``     | Read-only/resolved inertial drive torque for Engine.                                                                        |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float TransmittedClutchTorque { get; protected set; }`` | Read-only/resolved transmitted clutch torque for Engine.                                                                    |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float FlywheelEnergyJoules { get; }``                   | Read-only/resolved flywheel energy joules for Engine.                                                                       |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public AnimationCurve torqueCurve``                                    | Authored torque curve used by Engine.                                                                                       |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float reverseSpeedRatio``                                       | Authored reverse speed ratio used by Engine. Initial value: ``0.3f``.                                                       |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public float response``                                                | Authored response used by Engine. Initial value: ``3``.                                                                     |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual Gearbox ActiveGearbox { get; }``                        | Currently enabled connected gearbox, or ``null`` when no enabled gearbox participates.                                      |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float OutputTorque { get; protected set; }``            | Resolved propulsion torque available from the engine path; downstream allocation/intervention may limit wheel output.       |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float Rpm { get; protected set; }``                     | Resolved engine rotational speed in revolutions per minute.                                                                 |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float NormalizedRpm { get; }``                          | Read-only/resolved normalized rpm for Engine.                                                                               |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float Throttle { get; }``                               | Read-only/resolved throttle for Engine.                                                                                     |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float AverageWheelRpm { get; protected set; }``         | Read-only/resolved average wheel rpm for Engine.                                                                            |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual string GearLabel { get; }``                             | Read-only/resolved gear label for Engine.                                                                                   |
++--------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--enginecore:
+
+EngineCore
+----------
+
+**Runtime/Engine/Core/EngineCore.cs**
+
+Configuration/implementation type for engine core within engine and drivetrain.
+
+**Inherits / implements:** :ref:`CategoryCore <evs-api-modules--categorycore>`.
+
+.. _evs-api-drivedynamics--methods-5:
+
+Methods
+~~~~~~~
+
++-------------------------+------------------------------------------------------------+--------------------------------------------------------------------+
+| Signature               | Role and behavior                                          | Arguments and result                                               |
++=========================+============================================================+====================================================================+
+| ``public EngineCore()`` | Constructs ``EngineCore`` with the supplied initial state. | **Returns:** New instance initialized from the supplied arguments. |
++-------------------------+------------------------------------------------------------+--------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-7:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++------------------------------------------------------+--------------------------------------------------------------------------------------+
+| Member                                               | Meaning                                                                              |
++======================================================+======================================================================================+
+| ``public override ModuleCategory Category { get; }`` | Module responsibility category; it does not independently determine execution phase. |
++------------------------------------------------------+--------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--enginemodule:
+
+EngineModule
+------------
+
+**Runtime/Engine/Core/EngineModule.cs**
+
+Configuration/implementation type for engine module within engine and drivetrain.
+
+**Inherits / implements:** :ref:`Module <evs-api-modules--module>`, :ref:`IEngineModule <evs-api-modules--ienginemodule>`.
+
+.. _evs-api-drivedynamics--state-and-configuration-8:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++-------------------------------------------------------------+--------------------------------------------------------------------------------------+
+| Member                                                      | Meaning                                                                              |
++=============================================================+======================================================================================+
+| ``public sealed override ModuleCategory Category { get; }`` | Module responsibility category; it does not independently determine execution phase. |
++-------------------------------------------------------------+--------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--gearbox:
+
+Gearbox
+-------
+
+**Runtime/Engine/Gearbox/Gearbox.cs**
+
+Shared validated selection, ratios and shift state.
+
+**Inherits / implements:** :ref:`EngineModule <evs-api-drivedynamics--enginemodule>`.
+
+.. _evs-api-drivedynamics--methods-6:
+
+Methods
+~~~~~~~
+
++----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                                                                            | Role and behavior                                                                                                                                                                                                                                                                            | Arguments and result                                                                                                                                                                                                                                                                                                                                        |
++======================================================================================================================+==============================================================================================================================================================================================================================================================================================+=============================================================================================================================================================================================================================================================================================================================================================+
+| ``public virtual void ConfigureFor(VehicleController vehicle, Engine engine)``                                       | Connects and prepares the gearbox for its vehicle and engine context.                                                                                                                                                                                                                        | ``vehicle`` — Vehicle context/owner receiving the operation. ``engine`` — Engine whose running/RPM/gearbox state supplies the operation.                                                                                                                                                                                                                    |
++----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TrySelectGear(int gear, VehicleController vehicle)``                                           | Selects a signed gear (-1 reverse, 0 neutral, positive forward). Rejects invalid/unchanged gears, an active shift, unsafe direction changes or predicted redline. The vehicle overload verifies this is the engine's active gearbox; the numeric overload takes explicit speed/RPM evidence. | ``gear`` — Signed gear index: -1 reverse, 0 neutral, positive forward. ``vehicle`` — Vehicle context/owner receiving the operation. **Returns:** ``true`` if admitted/applied; inspect the described completion boundary and any out values.                                                                                                                |
++----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TryShiftUp(VehicleController vehicle)``                                                        | Requests the next higher gear through the gearbox's validated selection path.                                                                                                                                                                                                                | ``vehicle`` — Vehicle context/owner receiving the operation. **Returns:** ``true`` if admitted/applied; inspect the described completion boundary and any out values.                                                                                                                                                                                       |
++----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TryShiftDown(VehicleController vehicle)``                                                      | Requests the next lower gear through the gearbox's validated selection path.                                                                                                                                                                                                                 | ``vehicle`` — Vehicle context/owner receiving the operation. **Returns:** ``true`` if admitted/applied; inspect the described completion boundary and any out values.                                                                                                                                                                                       |
++----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Simulate(VehicleController vehicle, Command command, float wheelRpm, float maxRpm, float dt)`` | Advances gearbox shift/selection state for one mechanical timestep.                                                                                                                                                                                                                          | ``vehicle`` — Vehicle context/owner receiving the operation. ``command`` — Command sampled for this tick; use its channel metadata as well as axes. ``wheelRpm`` — Wheel rotational speed in revolutions per minute. ``maxRpm`` — Engine redline used for selection validation. ``dt`` — Elapsed time in seconds.                                           |
++----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TrySelectGear(int gear, float forwardSpeed, float wheelRpm, float maxRpm)``                    | Selects a signed gear (-1 reverse, 0 neutral, positive forward). Rejects invalid/unchanged gears, an active shift, unsafe direction changes or predicted redline. The vehicle overload verifies this is the engine's active gearbox; the numeric overload takes explicit speed/RPM evidence. | ``gear`` — Signed gear index: -1 reverse, 0 neutral, positive forward. ``forwardSpeed`` — Signed forward speed in m/s. ``wheelRpm`` — Wheel rotational speed in revolutions per minute. ``maxRpm`` — Engine redline used for selection validation. **Returns:** ``true`` if admitted/applied; inspect the described completion boundary and any out values. |
++----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Synchronize(int gear)``                                                                        | Synchronizes the gear selector as an explicit helper. It does not replace ``TrySelectGear`` safety validation for driving input.                                                                                                                                                             | ``gear`` — Signed gear index: -1 reverse, 0 neutral, positive forward.                                                                                                                                                                                                                                                                                      |
++----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--events-and-inspector-callbacks-4:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Declaration                                        | Trigger, payload and meaning                                                                                      |
++====================================================+===================================================================================================================+
+| ``public event System.Action<int> GearChanged``    | After accepted gear selection. Payload: signed gear index, with reverse -1, neutral 0 and forward gears positive. |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<int> ShiftStarted``   | When an accepted selection starts its shift interval. Payload: selected gear index.                               |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<int> ShiftCompleted`` | When that shift interval completes; a zero-duration shift can complete immediately. Payload: gear index.          |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-9:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                              | Meaning                                                                                                                                                                            |
++=====================================================+====================================================================================================================================================================================+
+| ``public float[] gearSpeedLimitsKph``               | Optional road speed at engine redline per forward gear, in km/h. Empty uses the authored Forward Ratios directly. Non-empty values derive ratios from wheel radius and engine RPM. |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float reverseSpeedLimitKph``               | Optional reverse road speed at redline; zero preserves the authored Reverse Ratio.                                                                                                 |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float[] forwardRatios``                    | Forward gear ratios, first gear at index 0. Used directly with no custom speed ranges.                                                                                             |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float reverseRatio``                       | Positive reverse gear reduction before final drive.                                                                                                                                |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float finalDrive``                         | Authored final drive used by Gearbox. Initial value: ``3.4f``.                                                                                                                     |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float efficiency``                         | Authored efficiency used by Gearbox. Initial value: ``0.9f``.                                                                                                                      |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float shiftDuration``                      | Authored shift duration used by Gearbox. Initial value: ``.14f``.                                                                                                                  |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float directionChangeSpeed``               | Authored direction change speed used by Gearbox. Initial value: ``0.6f``.                                                                                                          |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual int CurrentGear { get; }``         | Selected signed gear index: -1 reverse, 0 neutral, positive forward.                                                                                                               |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual int GearCount { get; }``           | Number of configured forward gears.                                                                                                                                                |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual string GearLabel { get; }``        | Read-only/resolved gear label for Gearbox.                                                                                                                                         |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool IsShifting { get; }``         | Whether the gearbox's configured shift interval is still active.                                                                                                                   |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float Ratio { get; }``             | Current signed transmission ratio including the declaring gearbox's ratio policy.                                                                                                  |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool AutomaticDirection { get; }`` | Read-only/resolved automatic direction for Gearbox.                                                                                                                                |
++-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--manualgearbox:
+
+ManualGearbox
+-------------
+
+**Runtime/Engine/Gearbox/ManualGearbox.cs**
+
+Provides the manually selected gearbox implementation.
+
+**Inherits / implements:** :ref:`Gearbox <evs-api-drivedynamics--gearbox>`.
+
+.. _evs-api-drivedynamics--motorcyclebalance:
+
+MotorcycleBalance
+-----------------
+
+**Runtime/Drive/Grounded/MotorcycleBalance.cs**
+
+Configuration/implementation type for motorcycle balance within engine and drivetrain.
+
+**Inherits / implements:** :ref:`DriveModule <evs-api-driveprofiles--drivemodule>`.
+
+.. _evs-api-drivedynamics--methods-7:
+
+Methods
+~~~~~~~
+
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                                                  | Role and behavior                                                                             | Arguments and result                                                                                                                                                                                                     |
++============================================================================================+===============================================================================================+==========================================================================================================================================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``                              | Measures wheelbase and prepares wheel/contact geometry for balance response.                  | ``vehicle`` — Vehicle context/owner receiving the operation.                                                                                                                                                             |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Uses gravity, contact and steering evidence to apply bounded motorcycle lean/balance support. | ``vehicle`` — Vehicle context/owner receiving the operation. ``command`` — Command sampled for this tick; use its channel metadata as well as axes. ``deltaTime`` — Elapsed time in seconds supplied by the owning loop. |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.          | ``profile`` — Movement/surface configuration, according to its declared type. **Returns:** ``true`` when the described condition holds; ``false`` otherwise.                                                             |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-10:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| Member                                                       | Meaning                                                                                     |
++==============================================================+=============================================================================================+
+| ``public override int ExecutionOrder { get; }``              | Default local priority within phase/category.                                               |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }``            | Cross-category execution barrier used by the module pipeline.                               |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float maximumLean``                                 | Authored maximum lean used by ``MotorcycleBalance``. Initial value: ``35``.                 |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float leanRate``                                    | Authored lean rate used by ``MotorcycleBalance``. Initial value: ``140``.                   |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float balanceStrength``                             | Authored balance strength used by ``MotorcycleBalance``. Initial value: ``150``.            |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float balanceDamping``                              | Authored balance damping used by ``MotorcycleBalance``. Initial value: ``18``.              |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float maximumAngularAcceleration``                  | Authored maximum angular acceleration used by ``MotorcycleBalance``. Initial value: ``80``. |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float recoveryAngle``                               | Authored recovery angle used by ``MotorcycleBalance``. Initial value: ``65``.               |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float steeringPrediction``                          | Blend from current wheel steering to anticipated driver steering.                           |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float measuredAccelerationWeight``                  | Blend from predicted to measured lateral acceleration.                                      |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float leanStartSpeed``                              | Forward speed in m/s below which banking fades to zero.                                     |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float fullLeanSpeed``                               | Forward speed in m/s at which full banking is available.                                    |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public float leanRateDamping``                             | Feed-forward damping of the requested lean rate.                                            |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public virtual float TargetLean { get; protected set; }``  | Requested motorcycle lean after steering and speed resolution, in degrees.                  |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public virtual float ActualLean { get; protected set; }``  | Read-only/resolved actual lean for ``MotorcycleBalance``.                                   |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentLean { get; protected set; }`` | Read-only/resolved current lean for ``MotorcycleBalance``.                                  |
++--------------------------------------------------------------+---------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--parkinghold:
+
+ParkingHold
+-----------
+
+**Runtime/Drive/Brakes/ParkingHold.cs**
+
+Configuration/implementation type for parking hold within engine and drivetrain.
+
+**Inherits / implements:** :ref:`DriveModule <evs-api-driveprofiles--drivemodule>`.
+
+.. _evs-api-drivedynamics--methods-8:
+
+Methods
+~~~~~~~
+
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                                                  | Role and behavior                                                                                                    | Arguments and result                                                                                                                                                                                                     |
++============================================================================================+======================================================================================================================+==========================================================================================================================================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``                              | Resolves the local Trailer used by detached-parking policy.                                                          | ``vehicle`` — Vehicle context/owner receiving the operation.                                                                                                                                                             |
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Adds bounded low-speed support while applicable parking/service braking is active; does nothing for a sleeping body. | ``vehicle`` — Vehicle context/owner receiving the operation. ``command`` — Command sampled for this tick; use its channel metadata as well as axes. ``deltaTime`` — Elapsed time in seconds supplied by the owning loop. |
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                 | ``profile`` — Movement/surface configuration, according to its declared type. **Returns:** ``true`` when the described condition holds; ``false`` otherwise.                                                             |
++--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-11:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------------------------+--------------------------------------------------------------------------------------------------+
+| Member                                            | Meaning                                                                                          |
++===================================================+==================================================================================================+
+| ``public float captureSpeed``                     | Authored capture speed used by ``ParkingHold``. Initial value: ``.5f``.                          |
++---------------------------------------------------+--------------------------------------------------------------------------------------------------+
+| ``public bool assistParkingBrake``                | Apply static holding assistance while the handbrake or detached-trailer parking brake is active. |
++---------------------------------------------------+--------------------------------------------------------------------------------------------------+
+| ``public bool assistServiceBrake``                | Apply static holding assistance while the service brake is active.                               |
++---------------------------------------------------+--------------------------------------------------------------------------------------------------+
+| ``public override int ExecutionOrder { get; }``   | Default local priority within phase/category.                                                    |
++---------------------------------------------------+--------------------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }`` | Cross-category execution barrier used by the module pipeline.                                    |
++---------------------------------------------------+--------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--steering:
+
+Steering
+--------
+
+**Runtime/Drive/Steering/Steering.cs**
+
+Configuration/implementation type for steering within engine and drivetrain.
+
+**Inherits / implements:** :ref:`DriveModule <evs-api-driveprofiles--drivemodule>`.
+
+.. _evs-api-drivedynamics--methods-9:
+
+Methods
+~~~~~~~
+
++-------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                               | Role and behavior                                                                                                       | Arguments and result                                                                                                                                            |
++=========================================================================+=========================================================================================================================+=================================================================================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``           | Discovers owned steering tie rods and measures axle/wheel geometry for its steering model.                              | ``vehicle`` — Vehicle context/owner receiving the operation.                                                                                                    |
++-------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController v, Command c, float dt)`` | Advances steering response/native wheel angles, publishes the resolved actuator and emits ``AngleChanged`` on a change. | ``v`` — V, interpreted by this operation in the declared type. ``c`` — C, interpreted by this operation in the declared type. ``dt`` — Elapsed time in seconds. |
++-------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``          | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                    | ``profile`` — Movement/surface configuration, according to its declared type. **Returns:** ``true`` when the described condition holds; ``false`` otherwise.    |
++-------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--events-and-inspector-callbacks-5:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| Declaration                                        | Trigger, payload and meaning                                                                    |
++====================================================+=================================================================================================+
+| ``public event System.Action<float> AngleChanged`` | When resolved road-wheel steering angle changes. Payload: angle in degrees, not column degrees. |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-12:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| Member                                                             | Meaning                                                                                               |
++====================================================================+=======================================================================================================+
+| ``public override int ExecutionOrder { get; }``                    | Default local priority within phase/category.                                                         |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }``                  | Cross-category execution barrier used by the module pipeline.                                         |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public bool speedSensitiveSteering``                             | Optional reduction of steering angle with speed. Off preserves full steering authority.               |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public bool advancedSteeringGeometry``                           | Optional radius/grip limits and Ackermann geometry. Off uses the configured steering angle directly.  |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float highSpeedAngleRatio``                               | Authored high speed angle ratio used by Steering. Initial value: ``0.3f``.                            |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float minimumTurnRadius``                                 | Minimum rear-axle centre turning radius in metres; zero disables the low-speed radius cap.            |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float maximumLateralAcceleration``                        | Steering authority at speed is limited to this requested lateral acceleration (m/s²).                 |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float ackermann``                                         | Authored ackermann used by Steering. Initial value: ``1``.                                            |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public bool useGroundGripLimit``                                 | Authored use ground grip limit used by Steering. Initial value: ``true``.                             |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentAngleLimit { get; protected set; }`` | Read-only/resolved current angle limit for Steering.                                                  |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public virtual float Wheelbase { get; protected set; }``         | Measured axle span used by steering geometry, in metres.                                              |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public bool arcadeHandling``                                     | Game-oriented yaw and lateral grip assistance while tires touch the ground.                           |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float assistanceStrength``                                | Authored assistance strength used by Steering. Initial value: ``.70f``.                               |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float yawResponse``                                       | Authored yaw response used by Steering. Initial value: ``7``.                                         |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float lateralResponse``                                   | Authored lateral response used by Steering. Initial value: ``4``.                                     |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float maximumYawRate``                                    | Upper requested yaw rate used by turning assistance, in rad/s.                                        |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public float arcadeLateralAcceleration``                         | Authored arcade lateral acceleration used by Steering. Initial value: ``35``.                         |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public bool stabilizePoweredSlides``                             | Keep a powered full-lock slide near its entry speed instead of accelerating into an expanding circle. |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public virtual bool StabilizingPoweredSlide { get; }``           | Read-only/resolved stabilizing powered slide for Steering.                                            |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+| ``public virtual float Angle { get; }``                            | Read-only/resolved angle for Steering.                                                                |
++--------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--tractioncontrol:
+
+TractionControl
+---------------
+
+**Runtime/Engine/Drivetrain/TractionControl.cs**
+
+Limits propulsion according to contact capacity and slip.
+
+**Inherits / implements:** :ref:`EngineModule <evs-api-drivedynamics--enginemodule>`.
+
+.. _evs-api-drivedynamics--methods-10:
+
+Methods
+~~~~~~~
+
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                                                  | Role and behavior                                                                                               | Arguments and result                                                                                                                                                                                                     |
++============================================================================================+=================================================================================================================+==========================================================================================================================================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``                              | Resets retained intervention feedback before later propulsion steps.                                            | ``vehicle`` — Vehicle context/owner receiving the operation.                                                                                                                                                             |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Limits wheel propulsion from contact/slip evidence and emits ``ActiveChanged`` when intervention state changes. | ``vehicle`` — Vehicle context/owner receiving the operation. ``command`` — Command sampled for this tick; use its channel metadata as well as axes. ``deltaTime`` — Elapsed time in seconds supplied by the owning loop. |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                            | ``profile`` — Movement/surface configuration, according to its declared type. **Returns:** ``true`` when the described condition holds; ``false`` otherwise.                                                             |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetTractionControlEnabled(bool value)``                              | Enables/disables this traction-control module through its module action.                                        | ``value`` — Requested bool state for this operation.                                                                                                                                                                     |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--events-and-inspector-callbacks-6:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++----------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| Declaration                                        | Trigger, payload and meaning                                                                                                           |
++====================================================+========================================================================================================================================+
+| ``public event System.Action<bool> ActiveChanged`` | When resolved traction-control intervention changes between active/inactive. Payload: bool; enabled configuration is a separate state. |
++----------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-13:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| Member                                                              | Meaning                                                                                                   |
++=====================================================================+===========================================================================================================+
+| ``public override int ExecutionOrder { get; }``                     | Default local priority within phase/category.                                                             |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }``                   | Cross-category execution barrier used by the module pipeline.                                             |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public float targetSlip``                                         | Authored target slip used by ``TractionControl``. Initial value: ``.22f``.                                |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public float launchReferenceSpeed``                               | Authored launch reference speed used by ``TractionControl``. Initial value: ``3``.                        |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public float tractionReserve``                                    | Authored traction reserve used by ``TractionControl``. Initial value: ``.9f``.                            |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public float reductionRate``                                      | Authored reduction rate used by ``TractionControl``. Initial value: ``12``.                               |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public float recoveryRate``                                       | Authored recovery rate used by ``TractionControl``. Initial value: ``1.8f``.                              |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public float minimumTorqueScale``                                 | Authored minimum torque scale used by ``TractionControl``. Initial value: ``.08f``.                       |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public bool reserveGripForCornering``                             | Authored reserve grip for cornering used by ``TractionControl``.                                          |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public float corneringFreedom``                                   | Allow power-dependent wheelspin during tight powered turns, while retaining straight-line launch control. |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual float MinimumTorqueScale { get; protected set; }`` | Read-only/resolved minimum torque scale for ``TractionControl``.                                          |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual float MaximumSlip { get; protected set; }``        | Read-only/resolved maximum slip for ``TractionControl``.                                                  |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual bool Active { get; }``                             | Read-only/resolved active for ``TractionControl``.                                                        |
++---------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--transmission:
+
+Transmission
+------------
+
+**Runtime/Engine/Gearbox/Transmission.cs**
+
+Selects Direct, Manual or Automatic transmission operation.
+
+**Inherits / implements:** :ref:`EngineModule <evs-api-drivedynamics--enginemodule>`.
+
+.. _evs-api-drivedynamics--methods-11:
+
+Methods
+~~~~~~~
+
++-------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                               | Role and behavior                                                                                                     | Arguments and result                                                                                                                                            |
++=========================================================================+=======================================================================================================================+=================================================================================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``           | Resolves missing engine/manual/automatic references and applies the selected transmission mode.                       | ``vehicle`` — Vehicle context/owner receiving the operation.                                                                                                    |
++-------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController v, Command c, float dt)`` | Consumes a transmission toggle or changed mode field and applies the selected Direct/Manual/Automatic implementation. | ``v`` — V, interpreted by this operation in the declared type. ``c`` — C, interpreted by this operation in the declared type. ``dt`` — Elapsed time in seconds. |
++-------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetMode(TransmissionMode value)``                 | Changes transmission or camera mode through the declaring component's transition rules.                               | ``value`` — Requested state/value in this operation's domain; use its configured range/unit.                                                                    |
++-------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--events-and-inspector-callbacks-7:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++--------------------------------------------------------------+--------------------------------------------------------------------------------+
+| Declaration                                                  | Trigger, payload and meaning                                                   |
++==============================================================+================================================================================+
+| ``public event System.Action<TransmissionMode> ModeChanged`` | After the declaring component's selected mode changes. Payload: its mode enum. |
++--------------------------------------------------------------+--------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--state-and-configuration-14:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++---------------------------------------------------+------------------------------------------------------------------------------------+
+| Member                                            | Meaning                                                                            |
++===================================================+====================================================================================+
+| ``public override int ExecutionOrder { get; }``   | Default local priority within phase/category.                                      |
++---------------------------------------------------+------------------------------------------------------------------------------------+
+| ``public override ExecutionPhase Phase { get; }`` | Cross-category execution barrier used by the module pipeline.                      |
++---------------------------------------------------+------------------------------------------------------------------------------------+
+| ``public Engine engine``                          | Authored engine used by Transmission.                                              |
++---------------------------------------------------+------------------------------------------------------------------------------------+
+| ``public AutomaticGearbox automatic``             | Authored automatic used by Transmission.                                           |
++---------------------------------------------------+------------------------------------------------------------------------------------+
+| ``public ManualGearbox manual``                   | Authored manual used by Transmission.                                              |
++---------------------------------------------------+------------------------------------------------------------------------------------+
+| ``public TransmissionMode mode``                  | Authored mode used by Transmission. Initial value: ``TransmissionMode.Automatic``. |
++---------------------------------------------------+------------------------------------------------------------------------------------+
+
+.. _evs-api-drivedynamics--transmissionmode:
+
+TransmissionMode
+----------------
+
+**Runtime/Engine/Gearbox/Transmission.cs**
+
+Defines the allowed transmission mode choices used by this topic.
+
+.. _evs-api-drivedynamics--values-1:
+
+Values
+~~~~~~
+
+-  ``Automatic``
+-  ``Manual``
+-  ``Direct``

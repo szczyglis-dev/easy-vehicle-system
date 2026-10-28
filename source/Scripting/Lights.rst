@@ -1,0 +1,214 @@
+.. _evs-scripting-lights--lighting-state-and-timing:
+
+Lighting state and timing
+=========================
+
+Vehicle lighting separates requested state from actual channel output. A driver requests low beams, high beams or indicators; the lighting component combines that request with channel availability and mechanical signals such as braking or reverse.
+
+Use this state layer for gameplay and UI rather than manipulating individual Unity lights directly. A custom renderer or lamp model can then present the same vehicle lighting behavior without becoming a second owner of the beam or indicator state.
+
+.. _evs-scripting-lights--implementation-map:
+
+Implementation map
+------------------
+
++--------------------+-------------------------------------------------------------+
+| Class              | Responsibility                                              |
++====================+=============================================================+
+| ``Lights``         | Owns beam/indicator requests, automatic outputs and timing. |
++--------------------+-------------------------------------------------------------+
+| ``LightChannel``   | Describes the physical light/emission output for a channel. |
++--------------------+-------------------------------------------------------------+
+| ``IndicatorAudio`` | Observes the indicator phase and presents clicks.           |
++--------------------+-------------------------------------------------------------+
+
+.. _evs-scripting-lights--requested-versus-output-state:
+
+Requested versus output state
+-----------------------------
+
+An unavailable channel can suppress an otherwise valid request. That distinction supports vehicles with different lamp configurations and application damage rules. A dashboard may show the requested beam mode while another display reports whether a particular channel actually produces output.
+
+Nullable overrides make ownership explicit. A brake-light override of ``true`` forces a request on; ``false`` forces it off; ``null`` returns control to the normal mechanic. Restore ``null`` when the cutscene or override ends instead of guessing the current brake state and writing it once.
+
+``Lights`` owns independent channel availability, beam request, overrides and the indicator clock. Tail normally follows beam mode. Brake/reverse output can follow mechanics or a nullable override; a ``false`` availability gate can suppress any channel.
+
+``SetBeamMode`` selects Off/Low/High. ``SetHighBeams``\ (``false``) returns toward low-beam policy. Tail/brake/reverse overrides accept ``null`` to resume automatic following. Lens emission uses property blocks; materials must support emission and independently controlled renderers must not overwrite each other's channel output.
+
+.. _evs-scripting-lights--indicator-events:
+
+Indicator events
+----------------
+
+Indicators have a requested direction and a flashing output clock. ``SetIndicators`` changes direction; the clock turns output on/off while that request remains active. A stalk animation needs direction, while a click and lamp emission need output phase.
+
+``IndicatorsChanged`` reports a changed direction request. ``IndicatorPhaseChanged(bool)`` reports the clock's lit/unlit phase. Use one phase listener for a shared hazard click, since left and right are synchronized. Beam state has its own ``BeamModeChanged`` notification and does not share the indicator timer.
+
+When replacing lamp rendering, retain the state machine and supply output through the configured channels or a deliberate derived implementation. When replacing only click audio, subscribe to phase and leave lamp rendering alone. This keeps two independent extensions from each restarting their own flashing clock.
+
+Subscribe to output phase when synchronizing a click or another phase-sensitive effect. Subscribe/read requested direction when showing the selected stalk state. Restarting the phase on every repeated input would keep a held indicator from following a stable clock, so unchanged requests deliberately preserve timing.
+
+Emission requires compatible material properties as well as channel state. If several systems write a renderer's property block, coordinate their ownership; correct indicator logic cannot prevent a later writer from replacing the rendered output.
+
+A newly selected direction starts a lit phase; repeating that state does not restart its clock. Hazards share one phase. ``IndicatorPhaseChanged`` reports actual output phase transitions. ``IndicatorAudio`` follows that phase, so hazards do not create one click per side.
+
+Optional ``tickOn``/``tickOff`` replace generated defaults independently. Disabling the channel/core suspends playback and removes its active subscription. The channel owns generated clips/sources, not assigned assets.
+
+.. _evs-scripting-lights--bind-a-daynight-action:
+
+Bind a day/night action
+-----------------------
+
+The sample sends one state request when the application changes night mode. It leaves lamp intensity, emission and output availability under the lighting component's configuration. This is also a useful boundary for replacing the visual implementation: the game can keep the same night action while the lamps change.
+
+Attach this beside game lighting controls and assign vehicle ``Lights``. It uses one public action per change rather than writing Unity Light intensities directly.
+
+**Example: ``VehicleNightLights.cs``**
+
+.. raw:: html
+
+   <!-- example: VehicleNightLights.cs -->
+
+.. code-block:: csharp
+
+   using UnityEngine;
+   using EasyVehicleSystem;
+
+   namespace VehicleDocumentationExamples
+   {
+       public class VehicleNightLights : MonoBehaviour
+       {
+           public Lights lights;
+           public void SetNight(bool night)
+           {
+               if (lights) lights.SetBeamMode(night ? BeamMode.Low : BeamMode.Off);
+           }
+       }
+   }
+
+Read ``BeamMode`` and actual channel output properties for UI. For Inspector setup see :doc:`Lights </Lights>`.
+
+.. _evs-scripting-lights--complete-public-method-and-event-index:
+
+Complete public method and event index
+--------------------------------------
+
+The lists below cover public methods and events for this topic and their package base contracts. Signatures include overloads. See :doc:`the detailed vehicle lighting API </API/Lights>` for arguments, return semantics, state and configuration. An override replaces the matching inherited implementation; it is not an additional call to make.
+
+.. _evs-scripting-lights--imodule:
+
+IModule
+~~~~~~~
+
+:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                     | Role                                                                                                                        |
++============================================================================+=============================================================================================================================+
+| ``void Configure(VehicleController vehicle)``                              | Repeatable setup contract supplied with the owning ``VehicleController``.                                                   |
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-lights--lightchannel:
+
+LightChannel
+~~~~~~~~~~~~
+
+:ref:`LightChannel <evs-api-lights--lightchannel>` gives the full declared contract.
+
++-----------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                        | Role                                                                                                                                 |
++===============================================+======================================================================================================================================+
+| ``public virtual void Apply(bool requested)`` | Applies requested lit state/intensity to configured native lights and emission outputs, publishing ``LitChanged`` on output changes. |
++-----------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
+
++------------------------------------------+---------------------------------------------------------------------+
+| Event / callback                         | Role                                                                |
++==========================================+=====================================================================+
+| ``public event Action<bool> LitChanged`` | When a ``LightChannel``'s actual lit output changes. Payload: bool. |
++------------------------------------------+---------------------------------------------------------------------+
+
+.. _evs-scripting-lights--lights:
+
+Lights
+~~~~~~
+
+:ref:`Lights <evs-api-lights--lights>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| Method                                                                              | Role                                                                                                          |
++=====================================================================================+===============================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``                       | Resolves missing Engine/Events references without replacing explicit assignments.                             |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float dt)`` | Consumes light/indicator commands, advances the shared blink clock and applies resolved lamp/emission output. |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual LightChannel GetChannel(LightType type)``                          | Returns the configured lighting channel for the selected light role.                                          |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void RestoreAutomaticLights()``                                    | Clears forced lighting overrides so automatic mechanic-following resumes.                                     |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetBeamMode(BeamMode mode)``                                  | Requests Off, Low or High beam policy through the lighting state machine.                                     |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetLowBeams(bool on)``                                        | Requests low-beam availability/state through normal beam policy.                                              |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetTailLights(bool on)``                                      | Changes the tail-light request/availability policy.                                                           |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetTailOverride(bool? on)``                                   | Forces tail output on/off; ``null`` resumes normal beam-following.                                            |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetHazards(bool on)``                                         | Requests synchronized left/right hazard indicators.                                                           |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetLeftIndicator(bool on)``                                   | Requests or clears the left turn-indicator state.                                                             |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetRightIndicator(bool on)``                                  | Requests or clears the right turn-indicator state.                                                            |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetHeadlights(bool on)``                                      | Requests the headlight on/off policy through the lighting state machine.                                      |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetHighBeams(bool on)``                                       | Requests or releases high beams using the component's low-beam return policy.                                 |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetIndicators(IndicatorState value)``                         | Requests the selected direction/hazard indicator state.                                                       |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetBrakeOverride(bool? on)``                                  | Forces brake output on/off; ``null`` restores mechanic-following.                                             |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetReverseOverride(bool? on)``                                | Forces reverse lamp output on/off; ``null`` resumes mechanic-following.                                       |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetChannelEnabled(LightType type, bool available)``           | Changes availability of a selected lighting channel independently of its requested state.                     |
++-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------+
+| Event / callback                                                 | Role                                                                                         |
++==================================================================+==============================================================================================+
+| ``public event System.Action<bool> IndicatorPhaseChanged``       | When the shared flashing output phase changes. Payload: lit bool; hazards share one phase.   |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------+
+| ``public event System.Action<BeamMode> BeamModeChanged``         | When requested beam mode changes. Payload: ``BeamMode``.                                     |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------+
+| ``public event System.Action<IndicatorState> IndicatorsChanged`` | When requested direction/hazard state changes. Payload: ``IndicatorState``, not blink phase. |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-lights--module:
+
+Module
+~~~~~~
+
+:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                    | Role                                                                                                                                   |
++===========================================================================================+========================================================================================================================================+
+| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                          | Role                                                                                                              |
++===========================================================================+===================================================================================================================+
+| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
