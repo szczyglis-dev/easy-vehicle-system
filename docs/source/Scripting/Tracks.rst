@@ -3,7 +3,7 @@
 Tracked drive and belt animation
 ================================
 
-Tracked movement uses wheel contacts grouped into left and right sides. The movement strategy distributes propulsion and turning demand between those sides. ``Belt`` meshes then animate from wheel motion along authored paths; they are not a chain of physical links driving the hull.
+Tracked movement uses wheel contacts grouped into left and right sides. The movement strategy distributes propulsion and turning demand between those sides. Belt meshes then animate from wheel motion along authored paths; they are not a chain of physical links driving the hull.
 
 This architecture allows the mechanical wheel arrangement and rendered track model to differ in detail. The integration still needs a clear mapping: which native wheels belong to each side, which paths represent those sides and which mesh axis corresponds to forward belt travel.
 
@@ -37,9 +37,9 @@ Prefer explicit arrays for a reusable prefab. Geometric fallback is convenient f
 
 Track turning requires lateral slip. A model with unrestricted sideways grip can resist a pivot even when the left and right propulsion requests are correct. Diagnose side membership, engine budget and friction policy together; raising motor torque alone can hide an incorrect turn setup.
 
-``Tracks`` stores explicit left/right ``WheelCollider`` arrays. If both are empty it uses geometric side fallback. A wheel on both sides, or outside explicit arrays, has no valid side. ``Configure`` membership in the Inspector rather than depending on object naming.
+``Tracks`` stores explicit left/right ``WheelCollider`` arrays. If both are empty it uses geometric side fallback. A wheel on both sides, or outside explicit arrays, has no valid side. Configure membership in the Inspector rather than depending on object naming.
 
-``TrackedProfile`` maps propulsion and pivot demand into the shared engine. A moving turn regulates different side speeds; a stationary pivot uses opposing targets. ``Steering`` compensation/redistribution remain bounded by the engine torque/power budget. Track visuals do not supply thrust.
+``TrackedProfile`` maps propulsion and pivot demand into the shared engine. A moving turn regulates different side speeds; a stationary pivot uses opposing targets. Steering compensation/redistribution remain bounded by the engine torque/power budget. Track visuals do not supply thrust.
 
 ``Friction`` permits lateral scrubbing during turns, with a low-speed launch policy. ``Tracks`` can add load/grip-limited lateral stability and oppose longitudinal drift during a pivot. Airborne/overturned unsupported hulls do not receive that support correction.
 
@@ -54,7 +54,7 @@ If a damage system later changes wheel availability, use the vehicle's availabil
 
 Use this only during setup/spawn, after configuring the vehicle's wheel definitions. The arrays must contain operational wheels belonging to that vehicle.
 
-**Example: ``TrackSideSetup.cs``**
+**Example:** ``TrackSideSetup.cs``
 
 .. raw:: html
 
@@ -134,12 +134,12 @@ DriveProfile
 | ``public virtual float ResolveExternalDriveIntent(VehicleController vehicle)``             | Returns signed non-wheel propulsion intent used by shared coasting/contact policy.                                |
 +--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-tracks--imodule:
+.. _evs-scripting-tracks--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -148,54 +148,6 @@ IModule
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-tracks--module:
-
-Module
-~~~~~~
-
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
-
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                    | Role                                                                                                                                   |
-+===========================================================================================+========================================================================================================================================+
-| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                          | Role                                                                                                              |
-+===========================================================================+===================================================================================================================+
-| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-tracks--trackvisuals:
-
-TrackVisuals
-~~~~~~~~~~~~
-
-:ref:`TrackVisuals <evs-api-tracks--trackvisuals>` gives the full declared contract.
-
-+-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
-| Method                                                                              | Role                                                                                           |
-+=====================================================================================+================================================================================================+
-| ``public override void Configure(VehicleController owner)``                         | Caches vehicle/Tracks and prepares left/right belt paths and retained link poses.              |
-+-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
-| ``public override bool SupportsProfile(DriveProfile profile)``                      | Checks movement-family compatibility; this is independent of the Unity enabled flag.           |
-+-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
-| ``public virtual bool TryGetPathPoint(Belt belt, int index, out Vector3 position)`` | Reads an interpolated point/orientation on a prepared belt path without advancing belt travel. |
-+-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
-| ``public virtual void AdvanceVisuals(float deltaTime)``                             | Advances belt-link and roller presentation from the configured wheel motion.                   |
-+-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-tracks--trackedprofile:
 
@@ -232,3 +184,51 @@ Tracks
 +--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
 | ``public virtual int SideOf(WheelCollider wheel)``                                         | Resolves a native wheel's left/right tracked-side membership.                                  |
 +--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-tracks--trackvisuals:
+
+TrackVisuals
+~~~~~~~~~~~~
+
+:ref:`TrackVisuals <evs-api-tracks--trackvisuals>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
+| Method                                                                              | Role                                                                                           |
++=====================================================================================+================================================================================================+
+| ``public override void Configure(VehicleController owner)``                         | Caches vehicle/Tracks and prepares left/right belt paths and retained link poses.              |
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``                      | Checks movement-family compatibility; this is independent of the Unity enabled flag.           |
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
+| ``public virtual bool TryGetPathPoint(Belt belt, int index, out Vector3 position)`` | Reads an interpolated point/orientation on a prepared belt path without advancing belt travel. |
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
+| ``public virtual void AdvanceVisuals(float deltaTime)``                             | Advances belt-link and roller presentation from the configured wheel motion.                   |
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-tracks--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                    | Role                                                                                                                                   |
++===========================================================================================+========================================================================================================================================+
+| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                          | Role                                                                                                              |
++===========================================================================+===================================================================================================================+
+| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+

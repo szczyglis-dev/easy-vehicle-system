@@ -7,24 +7,48 @@ Events connect the vehicle to UI, audio and application rules without making tho
 
 A display usually needs the latest ``Telemetry``; a quest or interaction system usually needs a particular event. Choosing the right source avoids reconstructing meaning from raw velocities or repeatedly comparing Inspector fields.
 
+.. _evs-scripting-events--configure-built-in-responses-in-the-inspector-first:
+
+Configure built-in responses in the Inspector first
+---------------------------------------------------
+
+For collision and landing sound, configure Audio/Damage Audio using :ref:`collision and landing sound setup <evs-audio--inspector-quick-start-collision-and-landing-sounds>`. For an authored control action, wire the Inspector's On Commit UnityEvent using :ref:`ControlInteraction <evs-controlinteractions--inspector-quick-start-wire-a-ui-action>`.
+
+Typed C# events listed below are not automatically Inspector UnityEvent fields. Custom subscribers require code (or an application adapter); assigning a clip to Event Audio needs no custom subscription script.
+
+.. _evs-scripting-events--effect-event-ownership:
+
+Effect event ownership
+----------------------
+
+Subscribe directly to the component that owns a mechanic. Collision contacts are published by VehicleController.Impacted as Impact; qualified wheel touchdowns by Suspension.Landed as LandingEvent. DamageAudio listens to both and keeps sound thresholds independent of damage. Nonphysical scripted damage can also use Damage.Hit.
+
+Stabilization publishes Overturned and Recovered with the Telemetry snapshot that caused the transition. These events work without an audio component or custom event hub.
+
+Events and EventAudio are optional application-defined channels. Configure a custom ID such as ``application.alert`` and matching recordings on EventAudio, assign its Events reference, then call Events.Publish with that ID, intensity and position. No built-in mechanic translates its events into string IDs. Disable or remove these custom components without affecting standard audio or physics.
+
+Pair direct subscriptions with unsubscriptions in OnEnable/OnDisable. DamageAudio updates its Suspension bindings when owned modules are registered, removed or reconfigured; repeated configuration does not duplicate listeners. It ignores disabled or foreign sources and keeps generated sources under its Audio core's mute and mix controls.
+
 .. _evs-scripting-events--implementation-map:
 
 Implementation map
 ------------------
 
-+-----------------------+-----------------------------------------------------------------------------------------+
-| Class                 | Responsibility                                                                          |
-+=======================+=========================================================================================+
-| ``VehicleController`` | Publishes command, configuration, ownership, collision and post-pipeline notifications. |
-+-----------------------+-----------------------------------------------------------------------------------------+
-| ``Telemetry``         | Carries the cached vehicle readings used by displays and observers.                     |
-+-----------------------+-----------------------------------------------------------------------------------------+
-| ``Impact``            | Stores copied collision information for deferred consumers.                             |
-+-----------------------+-----------------------------------------------------------------------------------------+
-| ``Module``            | Exposes lifecycle notifications around registered module work.                          |
-+-----------------------+-----------------------------------------------------------------------------------------+
-| ``Events``            | Provides vehicle feedback events for effect integrations.                               |
-+-----------------------+-----------------------------------------------------------------------------------------+
++-----------------------+----------------------------------------------------------------------------------------------------------+
+| Class                 | Responsibility                                                                                           |
++=======================+==========================================================================================================+
+| ``Events``            | Publishes application-defined custom effect events.                                                      |
++-----------------------+----------------------------------------------------------------------------------------------------------+
+| ``Impact``            | Stores copied collision information for deferred consumers.                                              |
++-----------------------+----------------------------------------------------------------------------------------------------------+
+| ``LandingEvent``      | Copies qualified wheel landing height, flight time, incoming speed, load, intensity and force estimates. |
++-----------------------+----------------------------------------------------------------------------------------------------------+
+| ``Telemetry``         | Carries the cached vehicle readings used by displays and observers.                                      |
++-----------------------+----------------------------------------------------------------------------------------------------------+
+| ``VehicleController`` | Publishes command, configuration, ownership, collision and post-pipeline notifications.                  |
++-----------------------+----------------------------------------------------------------------------------------------------------+
+| ``VehicleModule``     | Exposes lifecycle notifications around registered module work.                                           |
++-----------------------+----------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-events--subscribe-to-a-components-events:
 
@@ -44,7 +68,7 @@ Bind engine and seat state
 
 Assign the engine and seat in the Inspector. The example reads their initial state, then updates only when their events fire. Reading initial state matters because subscribing does not replay earlier events: an already running engine or occupied seat may not change again soon.
 
-**Example: ``VehicleEventBinding.cs``**
+**Example:** ``VehicleEventBinding.cs``
 
 .. raw:: html
 
@@ -136,7 +160,22 @@ Keep synchronous handlers short. Copy the values needed for later UI or applicat
 
 Action events generally report actual transitions made through public methods. Assigning a public field does not necessarily invoke the same validation/events. Continuous observers report resolved state. Publishers run synchronously on Unity's main thread; avoid re-entering the same action from its event.
 
-Use a copied ``Impact`` when work outlives a collision callback. A live Unity ``Collision`` belongs to that callback.
+Use a copied ``Impact`` when work outlives a collision callback. A live Unity ``Collision`` belongs to that callback. ``Impact.Telemetry`` carries the vehicle’s latest completed snapshot; check ``HasTelemetry`` for manually constructed impacts. Contact-time point, normal, velocity and impulse remain separate from this cached snapshot.
+
+.. _evs-scripting-events--diagnostic-snapshot:
+
+Diagnostic snapshot
+-------------------
+
+Read ``vehicle.Telemetry`` or subscribe to ``AfterPhysicsStep`` for one consistent set of readings. ``Position`` and ``Rotation`` describe the chassis in world space. ``Velocity`` is in m/s, ``Acceleration`` in m/s² and ``AngularVelocity`` in radians/second. ``LocalVelocity`` and ``LocalAcceleration`` use chassis axes: X right, Y up, Z forward. Acceleration includes gravity; ``SpecificForce`` subtracts it, so a stationary supported vehicle reads about 1 G and free fall about 0 G. ``FixedTime`` and ``DeltaTime`` identify the sample's simulation time.
+
+The snapshot also contains mass and centre of mass, the sampled ``InputCommand``, direct-control status, engine running state and torque, driven-wheel RPM, signed gear ratio, shift state, clutch engagement and slip, and fuel amount, capacity, fraction and consumption. Missing optional modules produce zero/false readings; ``HasFuelTank`` distinguishes an absent tank from an empty one. A disabled tank reports its remaining fuel and zero consumption.
+
+``Wheels`` contains a copied read-only entry for every configured wheel, in ``vehicle.Wheels`` order. Each entry reports hub pose, signed RPM and angular speed, tire circumference speed, steering, submitted motor/brake torque, suspension extension/compression, contact point/normal/force and longitudinal/lateral slip. Check ``IsOperational``, ``Grounded`` and ``HasGroundHit`` before interpreting contact data. Supplemental tread support may report ``Grounded`` without a detailed wheel hit. See :ref:`the field reference <evs-api-events--wheeltelemetry>` for units and availability.
+
+Direct control derives motion and tire spin from the commanded poses. Its contact force is an estimate of static support and its slip readings are zero; they do not represent a physical tire-force solution. Native-mode contact readings come from the preceding Unity physics solve, while submitted torques reflect the current module pipeline. The wheel pose is the unsmoothed hub pose, rather than the rendered visual interpolation.
+
+Snapshots retain their values when stored for history, including the wheel list. Publishing allocates a fresh wheel array and read-only wrapper each step; account for that when collecting telemetry from many vehicles. The public ``Telemetry`` constructor builds a motion-only snapshot; extended module/wheel readings are populated by ``VehicleController``.
 
 .. _evs-scripting-events--observe-without-polling-physics:
 
@@ -149,7 +188,7 @@ Expose read-only properties to a UI framework and let that framework decide form
 
 Attach this to a UI/controller object and assign the vehicle. It exposes values for your UI framework; no UI package is required. It subscribes once and removes that subscription on disable.
 
-**Example: ``VehicleReadout.cs``**
+**Example:** ``VehicleReadout.cs``
 
 .. raw:: html
 
@@ -202,23 +241,50 @@ Prefer the publisher closest to the rule you are implementing. A seat's ``Entere
 
 When implementing a derived component, preserve the relationship between state mutation and notification. Publish success only after the corresponding state is valid. Callers may inspect the component synchronously inside a handler, so notifying before updating its state exposes an inconsistent result.
 
-+------------------------+---------------------------------------------------------------------------------------------+
-| Source                 | Observe                                                                                     |
-+========================+=============================================================================================+
-| ``VehicleController``  | Configuration, input source, module membership, drive profile, teleport and sampled command |
-+------------------------+---------------------------------------------------------------------------------------------+
-| ``Engine``             | Ignition and accepted gear changes                                                          |
-+------------------------+---------------------------------------------------------------------------------------------+
-| ``FuelTank``           | Quantity change, empty transition and actual fuel increase                                  |
-+------------------------+---------------------------------------------------------------------------------------------+
-| ``PassengerSeat``      | ``Entered``, ``Exited``, ``ControllerChanged`` and custom ``ResetRequested``                |
-+------------------------+---------------------------------------------------------------------------------------------+
-| ``ControlInteraction`` | Inspector callbacks ``onStarted``, ``onCommit``, ``onCompleted`` and ``onCancelled``        |
-+------------------------+---------------------------------------------------------------------------------------------+
-| ``Damage``             | Accepted ``DamageHit`` snapshots                                                            |
-+------------------------+---------------------------------------------------------------------------------------------+
++------------------------+----------------------------------------------------------------------------------------------------------+
+| Source                 | Observe                                                                                                  |
++========================+==========================================================================================================+
+| ``ControlInteraction`` | Inspector callbacks ``onStarted``, ``onCommit``, ``onCompleted`` and ``onCancelled``                     |
++------------------------+----------------------------------------------------------------------------------------------------------+
+| ``Damage``             | Accepted ``DamageHit`` snapshots                                                                         |
++------------------------+----------------------------------------------------------------------------------------------------------+
+| ``Engine``             | Ignition and accepted gear changes                                                                       |
++------------------------+----------------------------------------------------------------------------------------------------------+
+| ``FuelTank``           | Quantity change, empty transition and actual fuel increase                                               |
++------------------------+----------------------------------------------------------------------------------------------------------+
+| ``PassengerSeat``      | ``Entered``, ``Exited``, ``ControllerChanged`` and custom ``ResetRequested``                             |
++------------------------+----------------------------------------------------------------------------------------------------------+
+| ``Suspension``         | ``Landed(LandingEvent)`` at first wheel contact; ``LandingCompleted(LandingEvent)`` at all-wheel support |
++------------------------+----------------------------------------------------------------------------------------------------------+
+| ``VehicleController``  | Configuration, input source, module membership, drive profile, teleport and sampled command              |
++------------------------+----------------------------------------------------------------------------------------------------------+
 
 Use named handlers or retain delegate references when unsubscribing. A protected Raise helper emits a notification; it does not implement the corresponding state change for a replacement.
+
+.. _evs-scripting-events--opening-and-closing-operations:
+
+Opening and closing operations
+------------------------------
+
+VehicleBodyPart and MovingPart publish OpeningStarted, OpeningCompleted, ClosingStarted and ClosingCompleted; motionEvents exposes the same four UnityEvents for Inspector bindings. Start precedes pose movement; completion follows actual arrival. Interrupted/reversed operations do not synthesize success. VehicleBodyPart.OpenChanged reports changes to the requested open/closed state. See :ref:`motion event timing and audio <evs-movingparts--motion-events-and-four-audio-cues>` and the :doc:`public API </API/MovingParts>`.
+
+.. _evs-scripting-events--wheel-landing-events:
+
+Wheel landing events
+--------------------
+
+Subscribe to ``Suspension.Landed`` for one notification at first upright wheel support after the configured minimum airborne time. Subscribe to ``LandingCompleted`` for the later arrival of all operational wheel rays. Both can fire in one step on a flat landing. Completion does not mean settled springs or full wheel load. Teleport, reconfiguration and disable cancel pending observation. Event delivery remains available with ``landingResponse=false``; disabling the Suspension component stops it.
+
+The immutable :ref:`LandingEvent <evs-api-events--landingevent>` includes Height (centre-of-mass apex descent along gravity, metres), AirTime (seconds), ImpactSpeed (surface-relative normal incoming m/s), SupportForce (sum of current native WheelHit forces), Intensity, contact position/normal/collider and IsRebound. EstimatedImpulse is chassis mass × incoming normal speed. EstimatedForce is that momentum divided by the physics step; neither is a measured contact impulse or peak force. These estimates describe incoming severity even when predictive absorption has softened the native first contact. Later axle contacts can increase ImpactSpeed in LandingCompleted.
+
+Use a handler such as ``void OnLanding(LandingEvent value)`` and pair ``suspension.Landed += OnLanding`` with ``suspension.Landed -= OnLanding``. For a sound integration, map ``value.Intensity`` to gain or configure Damage Audio → Landing Sound. DamageAudio receives the copied LandingEvent directly, including intensity and contact position. A genuine assisted rebound can produce another event after sufficient unsupported time, marked IsRebound; resting contact updates do not repeat the event. Raising helpers on derived Suspension classes retain subscribers; replacing the mechanic owns its event timing.
+
+.. _evs-scripting-events--events-reference:
+
+Events reference
+----------------
+
+For event names, arguments and firing conditions grouped by declaring class, see :doc:`Events reference </Scripting/EventsReference>`.
 
 .. _evs-scripting-events--complete-public-method-and-event-index:
 
@@ -234,28 +300,37 @@ Events
 
 :ref:`Events <evs-api-events--events>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                                                   |
-+============================================================================================+========================================================================================================================================+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Derives vehicle feedback transitions from current resolved mechanics/contact state and publishes corresponding ``EffectEvent`` values. |
-+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void ResetState()``                                                       | Clears the declaring mechanic's retained simulation history at an explicit reset boundary.                                             |
-+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Publish(string id, float intensity, Vector3 position)``              | Publishes a vehicle feedback event through the Events component.                                                                       |
-+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+-  ``public event Action<EffectEvent> Raised`` — Current raised.
+-  ``public virtual void Publish(string id, float intensity, Vector3 position)`` — Current publish.
 
-+---------------------------------------------+-----------------------------------------------------------+
-| Event / callback                            | Role                                                      |
-+=============================================+===========================================================+
-| ``public event Action<EffectEvent> Raised`` | When Events publishes feedback. Payload: ``EffectEvent``. |
-+---------------------------------------------+-----------------------------------------------------------+
+.. _evs-scripting-events--ivehiclemodule:
 
-.. _evs-scripting-events--feedback:
+IVehicleModule
+~~~~~~~~~~~~~~
 
-Feedback
-~~~~~~~~
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
-:ref:`Feedback <evs-api-events--feedback>` gives the full declared contract.
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                     | Role                                                                                                                        |
++============================================================================+=============================================================================================================================+
+| ``void Configure(VehicleController vehicle)``                              | Repeatable setup contract supplied with the owning ``VehicleController``.                                                   |
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-events--telemetry:
+
+Telemetry
+~~~~~~~~~
+
+-  **Telemetry** — ``public float GetSpeed(SpeedUnit unit)`` — Returns speed from the captured snapshot in the requested unit.
+
+.. _evs-scripting-events--tirefeedback:
+
+TireFeedback
+~~~~~~~~~~~~
+
+:ref:`TireFeedback <evs-api-events--tirefeedback>` gives the full declared contract.
 
 +-------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------+
 | Method                                                                  | Role                                                                                                   |
@@ -270,7 +345,7 @@ Feedback
 +----------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 | Event / callback                                                     | Role                                                                                                                      |
 +======================================================================+===========================================================================================================================+
-| ``public event Action Sampled``                                      | After Feedback updates its wheel/contact classification. No payload; read the component's current cached feedback.        |
+| ``public event Action Sampled``                                      | After TireFeedback updates its wheel/contact classification. No payload; read the component's current cached feedback.    |
 +----------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 | ``public event Action<int, bool> WheelGroundedChanged``              | When a wheel's feedback grounded state changes. Payload: wheel index and grounded bool.                                   |
 +----------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
@@ -278,30 +353,13 @@ Feedback
 +----------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 | ``public event Action<bool> SkiddingChanged``                        | When aggregate feedback skid state changes. Payload: bool.                                                                |
 +----------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<bool> BrakingChanged``                         | When aggregate feedback braking state changes. Payload: bool.                                                             |
-+----------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-events--imodule:
+.. _evs-scripting-events--vehiclemodule:
 
-IModule
-~~~~~~~
+VehicleModule
+~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
-
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                     | Role                                                                                                                        |
-+============================================================================+=============================================================================================================================+
-| ``void Configure(VehicleController vehicle)``                              | Repeatable setup contract supplied with the owning ``VehicleController``.                                                   |
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-events--module:
-
-Module
-~~~~~~
-
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -324,10 +382,3 @@ Module
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-events--telemetry:
-
-Telemetry
-~~~~~~~~~
-
--  ``public float GetSpeed(SpeedUnit unit)`` — Returns speed from the captured snapshot in the requested unit.

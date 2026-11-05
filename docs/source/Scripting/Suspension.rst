@@ -15,19 +15,19 @@ Implementation map
 +--------------------+----------------------------------------------------------------------------+
 | Class              | Responsibility                                                             |
 +====================+============================================================================+
-| ``Suspension``     | Configures native wheel support and suspension-related response.           |
-+--------------------+----------------------------------------------------------------------------+
-| ``ShockAbsorber``  | Animates a telescoping shock and optionally overrides one wheel's physics. |
+| ``AntiRoll``       | Adds cross-wheel roll support for the configured wheel relationships.      |
 +--------------------+----------------------------------------------------------------------------+
 | ``ControlArm``     | Resolves a visual control arm against its authored geometry.               |
 +--------------------+----------------------------------------------------------------------------+
-| ``SuspensionHub``  | Provides hub/kingpin geometry for the wheel assembly.                      |
-+--------------------+----------------------------------------------------------------------------+
-| ``SteeringTieRod`` | ``Tracks`` steering-link endpoints and geometry.                           |
-+--------------------+----------------------------------------------------------------------------+
 | ``HalfShaft``      | Presents axle articulation and shaft rotation.                             |
 +--------------------+----------------------------------------------------------------------------+
-| ``AntiRoll``       | Adds cross-wheel roll support for the configured wheel relationships.      |
+| ``ShockAbsorber``  | Animates a telescoping shock and optionally overrides one wheel's physics. |
++--------------------+----------------------------------------------------------------------------+
+| ``SteeringTieRod`` | Tracks steering-link endpoints and geometry.                               |
++--------------------+----------------------------------------------------------------------------+
+| ``Suspension``     | Configures native wheel support and suspension-related response.           |
++--------------------+----------------------------------------------------------------------------+
+| ``SuspensionHub``  | Provides hub/kingpin geometry for the wheel assembly.                      |
 +--------------------+----------------------------------------------------------------------------+
 
 .. _evs-scripting-suspension--configuration-ownership:
@@ -72,7 +72,7 @@ A failed configuration should be shown to the caller or logged with vehicle cont
 
 Attach this application component to a tuning object, assign vehicle and ``Suspension``, then invoke ``ApplyPreset`` after changing mass or a load preset. It deliberately applies configuration once per request, not every frame.
 
-**Example: ``SuspensionPreset.cs``**
+**Example:** ``SuspensionPreset.cs``
 
 .. raw:: html
 
@@ -181,12 +181,12 @@ HalfShaft
 | ``public virtual void UpdatePose()`` | Recomputes this visual linkage's pose from its authored geometry and current endpoints. |
 +--------------------------------------+-----------------------------------------------------------------------------------------+
 
-.. _evs-scripting-suspension--imodule:
+.. _evs-scripting-suspension--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -195,35 +195,6 @@ IModule
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-suspension--module:
-
-Module
-~~~~~~
-
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
-
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                    | Role                                                                                                                                   |
-+===========================================================================================+========================================================================================================================================+
-| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                          | Role                                                                                                              |
-+===========================================================================+===================================================================================================================+
-| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-suspension--shockabsorber:
 
@@ -262,15 +233,12 @@ Suspension
 
 :ref:`Suspension <evs-api-suspension--suspension>` gives the full declared contract.
 
-+-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                  | Role                                                                                                                         |
-+=========================================================================+==============================================================================================================================+
-| ``public override void Configure(VehicleController v)``                 | Builds owned shock-override mappings, clears travel history and applies configured native wheel spring/damper/travel policy. |
-+-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController v, Command c, float dt)`` | Updates per-wheel override settings, force-application placement and motion-dependent damping using envelope/native support. |
-+-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
-| ``public override bool SupportsProfile(DriveProfile profile)``          | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                         |
-+-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+-  ``public event Action<LandingEvent> Landed`` — // First wheel support after qualifying flight; copied impact context.
+-  ``public event Action<LandingEvent> LandingCompleted`` — // All operational wheel rays have support after Landed; not a promise of settled suspension.
+-  ``public override void Configure(VehicleController v)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual void ResetVehicleState(VehicleResetReason reason)`` — Clears transient state for the supplied reset reason without changing persistent configuration.
+-  ``public override void Step(VehicleController v, Command c, float dt)`` — Current step.
+-  ``public override bool SupportsProfile(DriveProfile profile)`` — Current supports profile.
 
 .. _evs-scripting-suspension--suspensionaxle:
 
@@ -314,3 +282,32 @@ SuspensionRotationLimits
 +---------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
 | ``public float Angle(float angle, Vector3 axis)``                   | Returns a signed angular component in degrees for the configured constrained frame.              |
 +---------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-suspension--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                    | Role                                                                                                                                   |
++===========================================================================================+========================================================================================================================================+
+| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                          | Role                                                                                                              |
++===========================================================================+===================================================================================================================+
+| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+

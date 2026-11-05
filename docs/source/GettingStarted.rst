@@ -3,29 +3,28 @@
 Getting started
 ===============
 
-For km/h, mph or m/s authoring and readouts, see :doc:`Speed units </SpeedUnits>`.
+For existing vehicles, :ref:`Basic Inspector workflow <evs-inspectorconfiguration--basic-inspector-workflow>` explains how to add components, fill lists, assign scene objects versus profile assets, apply settings and save prefab changes. Its subsystem table leads to practical setups for lights, suspension, audio, particles, damage and cockpit equipment.
 
 .. _evs-gettingstarted--install-the-package:
 
 Install the package
 -------------------
 
-Use one distribution format in a project. Start with a compatible Unity 6 project:
+1. Open a Unity **6000.0.84f1** or newer project and sign in with the Unity account used to acquire Easy Vehicle System from the Asset Store.
+2. Open **Window → Package Management → Package Manager** and select **My Assets**.
+3. Select **Easy Vehicle System**, click **Download** if needed, then **Import**.
+4. In the **Import Unity Package** window, keep the package files selected. Keep **Documentation** for the manual and **Demo** for the example scene and vehicles, then click **Import**.
+5. Find the imported content under ``Assets/Szczyglis/EasyVehicleSystem``. The manual is in ``Documentation``; the example scene is ``Demo/Demo.unity``.
 
--  **UPM:** install through Unity Package Manager. Read the manual in the package's Documentation~ directory and import **Demo** from its Samples section if you want the demo.
--  **Asset Store / Unity asset package:** use Unity's standard import window. Keep **Documentation** selected beside **Demo** in the file list; content is imported under ``Assets/Szczyglis/EasyVehicleSystem``.
-
-The package declares Unity **6000.0** or newer and its Input System/module dependencies in ``package.json``. The supplied demo uses URP materials. Use a compatible URP project for its intended appearance; when using another render pipeline, supply suitable materials for the sample models and effects. The vehicle mechanics do not require URP.
-
-Do not install both formats together: they contain the same assemblies and asset identities. See :doc:`installation layouts </Distribution>`.
+The package requires Unity **6000.0.84f1** or newer and Unity Input System **1.19.0**. Install Input System through Package Manager if it is not already present. The supplied demo uses URP materials. Use a compatible URP project for its intended appearance; when using another render pipeline, supply suitable materials for the sample models and effects. The vehicle mechanics do not require URP.
 
 .. _evs-gettingstarted--run-the-supplied-scene:
 
 Run the supplied scene
 ----------------------
 
-1. Keep Demo selected in the Asset Store import window, or import it from Package Manager's Samples section when using UPM.
-2. Open ``Demo.unity`` in the imported sample's folder, or ``Demo/Demo.unity`` in the asset-package layout.
+1. Keep **Demo** selected when importing the package from My Assets.
+2. Open ``Assets/Szczyglis/EasyVehicleSystem/Demo/Demo.unity``.
 3. Enter Play Mode. Use the on-screen vehicle list to identify selection keys and the selected vehicle's control hints.
 4. Use Page Up / Page Down to cycle vehicles, Tab to change camera mode and R to reset the selected vehicle's pose.
 
@@ -38,6 +37,8 @@ Create your first wheel vehicle
 
 This walkthrough builds a four-wheel car from your own model.
 
+**Video tutorial:** `Create your first vehicle <https://www.youtube.com/watch?v=IBx3IVRH8g0>`__
+
 .. _evs-gettingstarted--1-prepare-the-root-and-model:
 
 1. Prepare the root and model
@@ -47,6 +48,10 @@ This walkthrough builds a four-wheel car from your own model.
 2. Place the body model beneath it. Keep imported mesh scale/orientation corrections on model children.
 3. Add a **Rigidbody** to the root and a suitable chassis collider. Keep the chassis collider clear of the wheel volumes. Wheels share the root Rigidbody; do not add a Rigidbody to each tire.
 4. Select the root and choose **Tools → EasyVehicleSystem → Add Vehicle → Wheeled**. This adds VehicleController and the supporting modules.
+
+.. image:: images/start1.png
+   :alt: Vehicle root and model setup
+   :width: 800px
 
 .. _evs-gettingstarted--2-add-a-wheel-component-for-each-tire:
 
@@ -60,6 +65,10 @@ This walkthrough builds a four-wheel car from your own model.
 5. Set **Radius**, **Width** and **Mass** to match this tire. Radius is half the outside tire diameter, in metres. Review the WheelCollider gizmo against the model.
 6. Set the wheel roles: enable **Steering** on front wheels, **Driven** on the driven axle, **Brake** for service braking and **Handbrake** on the intended parking-brake wheels.
 7. Repeat for the remaining tires, for example **WheelFR**, **WheelRL** and **WheelRR**. Check each Visual assignment and pivot position individually.
+
+.. image:: images/start2.png
+   :alt: Wheel component and tire setup
+   :width: 800px
 
 For a first rear-wheel-drive car, use this role setup:
 
@@ -83,12 +92,16 @@ Enable Driven on both pairs for all-wheel drive. Wheel count and roles can be ch
 4. Use **Advanced wheel configuration** for width, mass, steering multiplier, drive weight and visual rotation offsets. After discovery, **Wheel Setup** is the authoring source used when the controller configures the Wheel components; make further tuning changes here.
 5. Click **Apply vehicle configuration**. Resolve validation messages before checking.
 
+.. image:: images/start3.png
+   :alt: Vehicle wheel registration and configuration
+   :width: 800px
+
 .. _evs-gettingstarted--4-connect-input-and-check:
 
 4. Connect input and check
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-1. In **Setup**, check the input source installed by the preset. Use the keyboard sample, ``ActionInput`` or your own ``IInput`` provider.
+1. In **Setup**, check the input source installed by the preset. Use the keyboard sample, ``ActionInput`` or your own ``IVehicleInput`` provider.
 2. Set the vehicle mass, center of mass and drivetrain values for your model. Adjust suspension travel, spring and damping for its weight.
 3. Place the vehicle above a ground collider and enter Play Mode. Check tire contact, steering direction, acceleration and braking.
 4. If a mesh rotates incorrectly, adjust its child orientation or Wheel Setup rotation offset. Check steering multipliers if an axle steers the wrong way.

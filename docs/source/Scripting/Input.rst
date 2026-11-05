@@ -5,30 +5,45 @@ Command sampling and input ownership
 
 The input system translates a player, AI or external producer into one ``Command`` for a vehicle tick. The command describes intent; engine, brakes and steering then resolve that intent into mechanical outputs. A keyboard adapter, an Input System adapter and a network adapter can therefore share the same vehicle mechanics.
 
-The integration has two boundaries: a producer fills a command, and ``VehicleController`` samples the currently selected ``IInput``. Input ownership belongs to the application. Installing several adapters does not define which player, AI or replay should control the vehicle.
+The integration has two boundaries: a producer fills a command, and ``VehicleController`` samples the currently selected ``IVehicleInput``. Input ownership belongs to the application. Installing several adapters does not define which player, AI or replay should control the vehicle.
+
+.. _evs-scripting-input--keyboard-configuration-and-gating:
+
+Keyboard configuration and gating
+---------------------------------
+
+Each keyboard adapter serializes ``enableControls`` with a default of ``true``. Continuous reads and one-shot polling honor it. Disabling releases held axes and pending commands, blocks the optional ``ActionInput`` fallback and resets the drive steering ramp or retained airplane throttle. The component itself stays enabled, so the same provider can remain assigned while controls are temporarily blocked.
+
+Keyboard keys are serialized ``Key`` fields, with ``Key.None`` meaning unbound. ``KeyboardDriveInput.gearKeys`` and ``alternateGearKeys`` map indices to requested gears; they can be configured independently. Each profile-specific action has its own field, including actions that happen to share a default key. The public ``ignitionKey``, ``profileKey`` and ``airplaneBrakeKey`` fields configure ignition, profile selection and airplane braking.
+
+The Inspector groups key fields under the initially collapsed **Keyboard bindings** foldout. Non-binding tuning and custom subclass fields remain visible. Edge-triggered actions are still latched in ``Update()`` and consumed by ``ReadCommand()`` once; changing bindings does not change the physics sampling contract. See :ref:`Keyboard setup <evs-input--keyboard-bindings>`.
 
 .. _evs-scripting-input--implementation-map:
 
 Implementation map
 ------------------
 
-+------------------------+-------------------------------------------------------------------------+
-| Class                  | Responsibility                                                          |
-+========================+=========================================================================+
-| ``Command``            | Defines axes, action requests and analog/digital channel metadata.      |
-+------------------------+-------------------------------------------------------------------------+
-| ``InputBuffer``        | Buffers axes and pending one-shot actions for fixed-step consumption.   |
-+------------------------+-------------------------------------------------------------------------+
-| ``ExternalController`` | Provides the buffered command API for external control.                 |
-+------------------------+-------------------------------------------------------------------------+
-| ``ActionInput``        | Reads configured Unity Input System actions.                            |
-+------------------------+-------------------------------------------------------------------------+
-| ``InputGate``          | Controls permission to pass input to the vehicle.                       |
-+------------------------+-------------------------------------------------------------------------+
-| ``VehicleController``  | Selects ``inputSource``, samples commands and publishes resolved state. |
-+------------------------+-------------------------------------------------------------------------+
++-----------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| Class                                   | Responsibility                                                                                                             |
++=========================================+============================================================================================================================+
+| ``Command``                             | Defines axes, action requests and analog/digital channel metadata.                                                         |
++-----------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| ``InputBuffer``                         | Buffers axes and pending one-shot actions for fixed-step consumption.                                                      |
++-----------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| ``ExternalController``                  | Provides the buffered command API for external control.                                                                    |
++-----------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| ``DirectController`` / ``IDirectInput`` | Optionally replaces physical driving with authoritative world-pose input while updating presentation from measured motion. |
++-----------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| ``ActionInput``                         | Reads configured Unity Input System actions.                                                                               |
++-----------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| ``InputGate``                           | Selects an input source for the active registered driving profile.                                                         |
++-----------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+| ``VehicleController``                   | Selects ``inputSource``, samples commands and publishes resolved state.                                                    |
++-----------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
 
 For adapter setup, see :doc:`Input </Input>`.
+
+For complete custom providers, see :ref:`Writing your own input source <evs-input--writing-your-own-input-source>`. Start with the ready-to-drive keyboard (W/S, A/D) or analog gamepad example; both read the device themselves. The fuller providers also cover UI/device setters, one-shot buffering and per-channel analog/digital flags.
 
 .. _evs-scripting-input--sampling-contract:
 
@@ -39,11 +54,15 @@ Render frames and physics ticks do not occur at the same rate. Buffer an action 
 
 ``SubmitCommand`` is appropriate when one producer owns the complete command. Partial producers should agree on composition before submission: replacing a command also replaces metadata and can erase another producer's pending request. Use ``ClearControls()`` at handover boundaries so a retained throttle or queued action cannot leak to the next owner.
 
-``VehicleController`` calls the selected enabled ``IInput`` once per fixed tick. Continuous axes remain until the provider changes/clears them. One-shot gear, lighting, ignition and profile requests must be consumed once.
+``VehicleController`` calls the selected enabled ``IVehicleInput`` once per fixed tick. Continuous axes remain until the provider changes/clears them. One-shot gear, lighting, ignition and profile requests must be consumed once.
 
 ``InputBuffer`` retains pending commands. ``SubmitCommand`` replaces the entire pending command and its channel masks; ``SetAxes`` changes the axis subset. ``ReadCommand`` sanitizes/clamps values and consumes actions. ``ClearControls`` releases all held values and queued actions.
 
 ``InputBuffer`` clears on focus loss and disable. ``ExternalController`` retains commands on focus loss and clears on disable. Neither component implements transport, AI decisions or ownership arbitration.
+
+For a working AI integration, see :ref:`Implementing an AI driver <evs-input--implementing-an-ai-driver>`: follow a target, brake near it, and visit waypoints. The guide includes complete scripts and Inspector setup.
+
+For authoritative position/rotation input instead of driving forces, see :ref:`Direct pose control <evs-input--direct-pose-control-for-ai-and-scripted-traffic>`. Select DirectController in the same Input Source slot, enable its flag, and submit world poses.
 
 .. _evs-scripting-input--external-controller-and-runtime-ownership:
 
@@ -56,7 +75,7 @@ Call ``Drive`` from the system that produces commands, not from a second vehicle
 
 Attach this component outside the vehicle's inactive hierarchy if it must control possession independently. Assign an enabled ``ExternalController`` owned by the vehicle. Call ``TakeControl``, submit ``Drive`` commands from your producer, and ``ReleaseControl`` when done.
 
-**Example: ``ExternalInputSession.cs``**
+**Example:** ``ExternalInputSession.cs``
 
 .. raw:: html
 
@@ -131,7 +150,16 @@ With ``PlayerInput``, the adapter resolves references through that player's acti
 Aircraft keyboard policy
 ------------------------
 
-``KeyboardFlightInput`` retains aircraft throttle, rather than using W/S as throttle. Its wheel-brake binding also controls the retained-throttle brake policy. ``Configure`` that adapter or replace it when using another cockpit convention. Independent analog throttle/brake behavior belongs to ``ActionInput`` and the command metadata, not keyboard polling.
+``KeyboardFlightInput`` retains aircraft throttle, rather than using W/S as throttle. Its wheel-brake binding also controls the retained-throttle brake policy. Configure that adapter or replace it when using another cockpit convention. Independent analog throttle/brake behavior belongs to ``ActionInput`` and the command metadata, not keyboard polling.
+
+.. _evs-scripting-input--runtime-keyboard-configuration:
+
+Runtime keyboard configuration
+------------------------------
+
+All four adapters inherit ``KeyboardInput``. ``SetControlsEnabled(false)`` immediately clears pending actions, steering state and any retained airplane throttle, and pauses the adapter's analog fallback. ``SetControlsEnabled(true)`` resumes input on subsequent updates. ``SetEnabled(false)`` is also available through the module API to disable the component itself.
+
+Use ``TrySetBinding(nameof(KeyboardDriveInput.forwardKey), Key.UpArrow)`` to change an action, and ``TryGetBinding`` to read it. Pass a gear index for the ``gearKeys`` and ``alternateGearKeys`` arrays. ``Key.None`` unbinds an action. Invalid names, field types, keys and array indices return ``false``; bindings are not resized automatically. ``ResetBindings()`` restores built-in defaults. Rebinding and resetting clear retained controls, so release and press one-shot action keys again after changing them. Changes made in Play Mode are session-local; save them through your game's settings system if needed.
 
 .. _evs-scripting-input--complete-public-method-and-event-index:
 
@@ -147,17 +175,17 @@ ActionInput
 
 :ref:`ActionInput <evs-api-input--actioninput>` gives the full declared contract.
 
-+------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| Method                                                                             | Role                                                                                                      |
-+====================================================================================+===========================================================================================================+
-| ``[ContextMenu("Refresh action bindings")] public virtual void RefreshBindings()`` | Re-resolves Input System action references, including the selected ``PlayerInput`` action asset.          |
-+------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``[ContextMenu("Use as vehicle input")] public virtual void UseAsVehicleInput()``  | Selects this action adapter as the vehicle's current input source.                                        |
-+------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public static Command MergeHover(Command keyboard, Command analog)``             | Combines hover-related adapter input into the current command.                                            |
-+------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual Command ReadCommand()``                                           | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered. |
-+------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
++------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| Method                                                                 | Role                                                                                                      |
++========================================================================+===========================================================================================================+
+| ``public virtual void RefreshBindings()``                              | Re-resolves Input System action references, including the selected ``PlayerInput`` action asset.          |
++------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual void UseAsVehicleInput()``                            | Selects this action adapter as the vehicle's current input source.                                        |
++------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public static Command MergeHover(Command keyboard, Command analog)`` | Combines hover-related adapter input into the current command.                                            |
++------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual Command ReadCommand()``                               | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered. |
++------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-input--command:
 
@@ -174,33 +202,39 @@ Command
 | ``public bool IsDigital(InputChannels channel)`` | Checks whether the specified command channel is marked as a digital input. |
 +--------------------------------------------------+----------------------------------------------------------------------------+
 
-.. _evs-scripting-input--iinput:
+.. _evs-scripting-input--directcontroller:
 
-IInput
-~~~~~~
+DirectController
+~~~~~~~~~~~~~~~~
 
-:ref:`IInput <evs-api-input--iinput>` gives the full declared contract.
+:ref:`DirectController <evs-api-input--directcontroller>` documents the mode flags and inherited buffered command API.
 
-+---------------------------+-----------------------------------------------------------------------------------------------------------+
-| Method                    | Role                                                                                                      |
-+===========================+===========================================================================================================+
-| ``Command ReadCommand()`` | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered. |
-+---------------------------+-----------------------------------------------------------------------------------------------------------+
++------------------------------------------------------------------------+---------------------------------------------------------------------+
+| Method                                                                 | Role                                                                |
++========================================================================+=====================================================================+
+| ``public virtual bool SetPose(Vector3 position, Quaternion rotation)`` | Store a validated world-pose request.                               |
++------------------------------------------------------------------------+---------------------------------------------------------------------+
+| ``public virtual void ClearPose()``                                    | Clear the stored pose and hold current placement without a target.  |
++------------------------------------------------------------------------+---------------------------------------------------------------------+
+| ``public virtual void SetDirectControl(bool value)``                   | Switch pose versus ordinary command control at the next fixed tick. |
++------------------------------------------------------------------------+---------------------------------------------------------------------+
+| ``public virtual Pose ReadPose(Pose currentPose, float deltaTime)``    | Sample the independent target or stored pose.                       |
++------------------------------------------------------------------------+---------------------------------------------------------------------+
+| ``public virtual void UseAsVehicleInput()``                            | Select this source on its parent vehicle.                           |
++------------------------------------------------------------------------+---------------------------------------------------------------------+
 
-.. _evs-scripting-input--imodule:
+.. _evs-scripting-input--idirectinput:
 
-IModule
-~~~~~~~
+IDirectInput
+~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IDirectInput <evs-api-input--idirectinput>` defines optional direct ownership alongside IVehicleInput.
 
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                     | Role                                                                                                                        |
-+============================================================================+=============================================================================================================================+
-| ``void Configure(VehicleController vehicle)``                              | Repeatable setup contract supplied with the owning ``VehicleController``.                                                   |
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
++------------------------------------------------------+-------------------------------------------------------------+
+| Method                                               | Role                                                        |
++======================================================+=============================================================+
+| ``Pose ReadPose(Pose currentPose, float deltaTime)`` | Return the next world pose for the supplied fixed timestep. |
++------------------------------------------------------+-------------------------------------------------------------+
 
 .. _evs-scripting-input--inputbuffer:
 
@@ -209,47 +243,30 @@ InputBuffer
 
 :ref:`InputBuffer <evs-api-input--inputbuffer>` gives the full declared contract.
 
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| Method                                                                                                         | Role                                                                                                      |
-+================================================================================================================+===========================================================================================================+
-| ``public virtual void SubmitCommand(Command command)``                                                         | Replaces the pending buffered command, including its channel metadata and action flags.                   |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ClearControls()``                                                                        | Clears retained axes, channel metadata and pending one-shot input actions.                                |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetAxes(float throttle, float steering, float brake = 0, bool handbrake = false)``       | Updates buffered drive-axis values and their input metadata without replacing all pending actions.        |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetAnalogAxes(float throttle, float steering, float brake = 0, bool handbrake = false)`` | Sets proportional driving axes and marks the corresponding channels analog.                               |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetFlightAxes(float pitch, float roll, float yaw, float lift)``                          | Updates buffered lift/pitch/roll/yaw-related axes using the declared channel metadata.                    |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetStrafe(float strafe)``                                                                | Updates the buffered lateral movement axis.                                                               |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleIgnition()``                                                                       | Queues an ignition toggle for the next sampled command.                                                   |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleProfile()``                                                                        | Queues a movement-profile toggle for the next sampled command.                                            |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetClutch(float pedal)``                                                                 | Sets normalized clutch pedal travel: zero released/connected, one pressed/disconnected.                   |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void SelectGear(int gear)``                                                                   | Queues an explicit gear-selection action in the input buffer.                                             |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ShiftGear(int direction)``                                                               | Queues a relative up/down gear action in the input buffer.                                                |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleGearbox()``                                                                        | Queues a transmission-mode toggle in the input buffer.                                                    |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleHeadlights()``                                                                     | Queues a headlight toggle in the input buffer.                                                            |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleHighBeams()``                                                                      | Queues a high-beam toggle in the input buffer.                                                            |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleLeftIndicator()``                                                                  | Queues a left-indicator toggle for the next sampled command.                                              |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleRightIndicator()``                                                                 | Queues a right-indicator toggle for the next sampled command.                                             |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleHazards()``                                                                        | Queues a hazard-indicator toggle in the input buffer.                                                     |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetIndicators(IndicatorState state)``                                                    | Requests the selected direction/hazard indicator state.                                                   |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual Command ReadCommand()``                                                                       | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered. |
-+----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+-  ``public virtual void ClearControls()`` — // Release all held controls and queued actions, e.g. when AI/network ownership changes.
+-  ``public virtual Command ReadCommand()`` — // Returns the current continuous controls and consumes queued one-shot actions so they cannot repeat on later // physics ticks.
+-  ``public virtual void ResetInput()`` — Clears held input and pending one-shot requests for a vehicle reset.
+-  ``public virtual void SelectGear(int gear)`` — // Queues an explicit gear request; the active gearbox applies its direction and over-rev guards.
+-  ``public virtual void SetAnalogAxes(float throttle, float steering, float brake = 0, bool handbrake = false)`` — Current set analog axes.
+-  ``public virtual void SetAxes(float throttle, float steering, float brake = 0, bool handbrake = false)`` — Current set axes.
+-  ``public virtual void SetBurnout(bool held)`` — Current set burnout.
+-  ``public virtual void SetClutch(float pedal)`` — Current set clutch.
+-  ``public virtual void SetFlightAxes(float pitch, float roll, float yaw, float lift)`` — Current set flight axes.
+-  ``public virtual void SetHorn(bool held)`` — Current set horn.
+-  ``public virtual void SetIndicators(IndicatorState state)`` — Current set indicators.
+-  ``public virtual void SetNitro(bool held)`` — Current set nitro.
+-  ``public virtual void SetStrafe(float strafe)`` — Current set strafe.
+-  ``public virtual void SetWheelLift(bool held)`` — Current set wheel lift.
+-  ``public virtual void ShiftGear(int direction)`` — // Queues a single upward or downward shift, reducing the supplied direction to its sign.
+-  ``public virtual void SubmitCommand(Command command)`` — // Replace the complete pending command, including one-shot actions. ReadCommand consumes actions once.
+-  ``public virtual void ToggleGearbox()`` — // Queues a transmission-mode cycle for the next command sample.
+-  ``public virtual void ToggleHazards()`` — // Queues one hazard-light toggle for the next command sample.
+-  ``public virtual void ToggleHeadlights()`` — // Queues one low-beam toggle without reading or changing a physical light directly.
+-  ``public virtual void ToggleHighBeams()`` — // Queues one high-beam toggle for the lighting module.
+-  ``public virtual void ToggleIgnition()`` — // Queues one ignition toggle; reading the command consumes it once.
+-  ``public virtual void ToggleLeftIndicator()`` — // Queues one left-indicator toggle for the next command sample.
+-  ``public virtual void ToggleProfile()`` — // Queues one drive-profile toggle for the next command sample.
+-  ``public virtual void ToggleRightIndicator()`` — // Queues one right-indicator toggle for the next command sample.
 
 .. _evs-scripting-input--inputgate:
 
@@ -279,6 +296,43 @@ InputGate.Route
 | ``public UnityEvent selected`` | Inspector callback when this controller route is selected; no payload. |
 +--------------------------------+------------------------------------------------------------------------+
 
+.. _evs-scripting-input--ivehicleinput:
+
+IVehicleInput
+~~~~~~~~~~~~~
+
+:ref:`IVehicleInput <evs-api-input--ivehicleinput>` gives the full declared contract.
+
++---------------------------+-----------------------------------------------------------------------------------------------------------+
+| Method                    | Role                                                                                                      |
++===========================+===========================================================================================================+
+| ``Command ReadCommand()`` | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered. |
++---------------------------+-----------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-input--ivehicleinputreset:
+
+IVehicleInputReset
+~~~~~~~~~~~~~~~~~~
+
+:ref:`IVehicleInputReset <evs-api-input--ivehicleinputreset>` gives the full declared contract.
+
+-  ``void ResetInput()`` — Clears held input and pending one-shot requests for a vehicle reset.
+
+.. _evs-scripting-input--ivehiclemodule:
+
+IVehicleModule
+~~~~~~~~~~~~~~
+
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
+
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                     | Role                                                                                                                        |
++============================================================================+=============================================================================================================================+
+| ``void Configure(VehicleController vehicle)``                              | Repeatable setup contract supplied with the owning ``VehicleController``.                                                   |
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+
 .. _evs-scripting-input--keyboardboatinput:
 
 KeyboardBoatInput
@@ -291,6 +345,8 @@ KeyboardBoatInput
 +==========================================+===========================================================================================================+
 | ``public virtual Command ReadCommand()`` | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered. |
 +------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+
+-  **KeyboardBoatInput** — ``public override void ResetBindings()`` — Restores default bindings and clears retained controls.
 
 .. _evs-scripting-input--keyboarddriveinput:
 
@@ -307,6 +363,8 @@ KeyboardDriveInput
 | ``public virtual Command ReadCommand()``                                | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered.     |
 +-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
 
+-  **KeyboardDriveInput** — ``public override void ResetBindings()`` — Restores default bindings and clears retained controls.
+
 .. _evs-scripting-input--keyboardflightinput:
 
 KeyboardFlightInput
@@ -314,13 +372,20 @@ KeyboardFlightInput
 
 :ref:`KeyboardFlightInput <evs-api-input--keyboardflightinput>` gives the full declared contract.
 
-+------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| Method                                   | Role                                                                                                      |
-+==========================================+===========================================================================================================+
-| ``public virtual void ResetControls()``  | Clears the flight keyboard adapter's retained control state.                                              |
-+------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual Command ReadCommand()`` | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered. |
-+------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+-  ``public virtual Command ReadCommand()`` — // Returns the current continuous controls and consumes queued one-shot actions so they cannot repeat on later // physics ticks.
+-  ``public override void ResetBindings()`` — Current reset bindings.
+-  ``public virtual void ResetControls()`` — Current reset controls.
+-  ``public virtual void ResetInput()`` — Clears held input and pending one-shot requests for a vehicle reset.
+
+.. _evs-scripting-input--keyboardinput:
+
+KeyboardInput
+~~~~~~~~~~~~~
+
+-  **KeyboardInput** — ``public abstract void ResetBindings()`` — Restores all keyboard bindings to the built-in defaults and clears retained controls. Other tuning values remain unchanged.
+-  **KeyboardInput** — ``public virtual void SetControlsEnabled(bool value)`` — Enables or pauses this component's controls. Keyboard inputs clear queued actions, axes and retained aircraft throttle when disabled; Cameras restores its original camera lens when paused.
+-  **KeyboardInput** — ``public virtual bool TryGetBinding(string action, out Key key, int index = -1)`` — Reads a binding using the same field-name/index rules. Returns false for an invalid lookup and writes Key.None.
+-  **KeyboardInput** — ``public virtual bool TrySetBinding(string action, Key key, int index = -1)`` — Sets a Key field by its exact serialized name, or a Key[] element using index. Returns false for unknown names, wrong types, invalid keys or indices. Key.None unbinds the action. Clears retained controls on success.
 
 .. _evs-scripting-input--keyboardsubmarineinput:
 
@@ -335,12 +400,14 @@ KeyboardSubmarineInput
 | ``public virtual Command ReadCommand()`` | Returns a sanitized sampled command and consumes this provider's pending one-shot actions where buffered. |
 +------------------------------------------+-----------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-input--module:
+-  **KeyboardSubmarineInput** — ``public override void ResetBindings()`` — Restores default bindings and clears retained controls.
 
-Module
-~~~~~~
+.. _evs-scripting-input--vehiclemodule:
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |

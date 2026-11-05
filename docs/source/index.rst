@@ -7,6 +7,8 @@ Easy Vehicle System is a modular vehicle package for Unity. It provides ready-to
 
 **Full documentation:** https://easyvehiclesystem.readthedocs.io/en/latest/
 
+**Youtube tutorials:** `Click here <https://www.youtube.com/playlist?list=PLVuGjQDh104Q>`__
+
 .. _evs-index--version-and-compatibility:
 
 Version and compatibility
@@ -15,9 +17,9 @@ Version and compatibility
 +------------------+----------------------------------------------------------------------------------------------------------+
 | Item             | Support                                                                                                  |
 +==================+==========================================================================================================+
-| Version          | **1.0.0**                                                                                                |
+| Version          | **1.0.2**                                                                                                |
 +------------------+----------------------------------------------------------------------------------------------------------+
-| Unity            | **Unity 6 — 6000.0 or newer**                                                                            |
+| Unity            | **Unity 6.0 LTS — 6000.0.84f1 or newer**                                                                 |
 +------------------+----------------------------------------------------------------------------------------------------------+
 | Render pipelines | **Built-in Render Pipeline, Universal Render Pipeline (URP) and High Definition Render Pipeline (HDRP)** |
 +------------------+----------------------------------------------------------------------------------------------------------+
@@ -25,6 +27,10 @@ Version and compatibility
 +------------------+----------------------------------------------------------------------------------------------------------+
 
 Vehicle mechanics are independent of the render pipeline. The supplied demo uses URP materials; for Built-in or HDRP, assign materials and shaders suitable for that pipeline to vehicles, water and effects. Installation keeps your project's render pipeline settings.
+
+.. image:: images/controller_inspector.png
+   :alt: Vehicle root and model setup
+   :width: 800px
 
 .. _evs-index--key-features:
 
@@ -49,7 +55,7 @@ Start building
 
 Read :doc:`Introduction and quick start </Introduction>` for the setup sequence and full guide index, or go directly to :doc:`Getting started </GettingStarted>`.
 
-Explore the :doc:`demo vehicles </Demo>`, browse the :doc:`scripting reference </Scripting/index>` and :doc:`public API </API>`, or consult :doc:`Troubleshooting </Troubleshooting>`. See :doc:`Installation layouts </Distribution>` for package formats.
+Explore the :doc:`demo vehicles </Demo>`, browse the :doc:`scripting reference </Scripting/index>` and :doc:`public API </API>`, or consult :doc:`Troubleshooting </Troubleshooting>`. See :doc:`Installation and included content </Distribution>` for import instructions and included folders.
 
 .. _evs-index--links:
 
@@ -68,6 +74,20 @@ Author
 
 Marcin Szczygliński (szczyglis83@gmail.com)
 
+.. _evs-index--demo-credits:
+
+Demo credits
+------------
+
+Authors, licenses and available source URLs for the third-party models and audio used in the demo are listed in :doc:`Third-party credits </ThirdParty>`.
+
+.. _evs-index--complete-inspector-reference:
+
+Complete Inspector reference
+----------------------------
+
+:doc:`All component settings </InspectorReference>` — descriptions, declared defaults, Inspector limits, inherited settings and nested configuration for every package system and the demo components.
+
 Contents
 ========
 
@@ -80,10 +100,11 @@ Contents
    Demo
    VehicleModelConvention
    Configuration
+   ModulesAndArchitecture
    InspectorConfiguration
    ChoosingSystems
    Input
-   SpeedUnits
+   Cameras
    VehicleTuning
    Physics
 
@@ -93,7 +114,6 @@ Contents
    :caption: Driving and ground contact
 
    DriveProfiles
-   Media
    Gearbox
    Clutch
    Differential
@@ -103,7 +123,9 @@ Contents
    TireCollision
    Surfaces
    Tracked
+   DrivingActions
    Towing
+   CombinedVehicles
 
 
 .. toctree::
@@ -120,14 +142,17 @@ Contents
    :maxdepth: 1
    :caption: Passengers and interactive controls
 
-   Passengers
-   PassengerAccess
-   HumanAnatomy
-   SeatsAndHandles
-   SteeringHandGrip
    Interior
+   Passengers
+   HumanAnatomy
+   Seats
+   Handles
+   SteeringHandGrip
+   HandPositions
+   PassengerAccess
    InteriorControls
    ControlInteractions
+   HandleAnimation
    InteriorSystems
 
 
@@ -137,7 +162,9 @@ Contents
 
    MovingParts
    Lights
+   Wipers
    Damage
+   CollisionsAndStabilization
    Audio
    Particles
    Decals
@@ -151,6 +178,7 @@ Contents
    Architecture
    Scripting
    Scripting/index
+   Scripting/EventsReference
    API
 
 
@@ -158,9 +186,16 @@ Contents
    :maxdepth: 1
    :caption: Reference and support
 
+   SpeedUnits
    Performance
    Troubleshooting
    Distribution
    DemoResources
    ThirdParty
 
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Inspector settings reference
+
+   InspectorReference

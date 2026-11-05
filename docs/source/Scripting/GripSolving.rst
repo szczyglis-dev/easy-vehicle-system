@@ -3,7 +3,7 @@
 Grip fitting and steering ownership
 ===================================
 
-Grip fitting turns a control's surface description into a plausible hand pose for a particular character. It uses palm frames, measured finger geometry and anatomical bounds. ``Steering`` adds another problem: the hands may need to release and reposition while the column rotates through more than one revolution.
+Grip fitting turns a control's surface description into a plausible hand pose for a particular character. It uses palm frames, measured finger geometry and anatomical bounds. Steering adds another problem: the hands may need to release and reposition while the column rotates through more than one revolution.
 
 Keep geometry fitting and hand ownership separate. A fit answers where fingers can close around a surface. A reservation answers which system is allowed to use a hand while steering, operating a switch or performing another task.
 
@@ -35,17 +35,13 @@ Geometry and binding
 
 ``HandGrip`` describes a character hand in terms of palm and finger frames. ``AdaptiveHandGrip`` uses those measurements and the selected handle's surface to choose finger poses. The fit answers how a particular hand can close around a particular object; it does not move the object's mesh or change the character's bone lengths.
 
-During binding, the solver calibrates/reuses character geometry and prepares the contact fit. During presentation it applies that fit and permitted gestures. ``closure`` and pressure-related settings describe the hand's current presentation; measurements such as pad radius and maximum flexion describe the character. Keep those two categories separate when authoring a new rig.
+During binding, the solver calibrates/reuses character geometry and prepares the contact fit. During presentation it applies that fit and permitted gestures. Saved finger angles and pressure-pose selection describe the hand's current presentation; measurements such as pad radius and maximum flexion describe the character. Keep those two categories separate when authoring a new rig.
 
 To replace finger posing without replacing seats, implement ``IPassengerHandPose``. Preserve ``TryApplyPose(bool gripping)``, ``Release()`` and ``Unbind()`` semantics: applying a grip, relaxing the current hand and ending the association are different lifecycle operations. A driver that only writes bones but never releases its binding can keep fighting animation after seat exit.
 
 Fit quality depends on calibration before it depends on iteration count. Check the open/reference rotations, flexion axes and pad sizes for the actual character. A solver constrained to incorrect axes can only choose among incorrect poses; increasing iterations makes that error more expensive rather than correcting it.
 
 A binding associates one character with one control geometry. Reuse the fitted coordinates during ordinary motion. Refit or rebind when the underlying dimensions change, such as replacing a wheel rim with a differently sized control. ``AdaptiveHandGrip.MaximumPenetration`` and ``MeanContactGap`` can help distinguish intrusion from fingers that remain visibly separated.
-
-``HandGrip`` stores character palm/finger frames and fallback poses. ``AdaptiveHandGrip`` fits measured phalanx/pad geometry against the configured control surface within calibrated anatomical bounds. ``Wheel``/yoke grips support rim geometry; cylinder grips use a palm frame and diameter.
-
-Binding prepares the fit for that character/geometry. Runtime gestures reuse fitted coordinates instead of optimizing an entirely new grasp every step. Rebind after live geometry changes; use editor preview while authoring. ``MotorcycleHandle`` uses editor-prepared fixed finger poses, which must be saved for intended spawned character variants.
 
 .. _evs-scripting-gripsolving--steering-angle-mapping:
 
@@ -69,7 +65,7 @@ Supported hands and reservations
 
 Release through ``ReleaseHand`` using the same owner. Keep the owner alive for the task's lifetime and clean up on disable. Do not claim a reservation by editing the handle's per-hand contact values: those values describe contact presentation, while the reservation is the arbitration boundary.
 
-Regrip planning distinguishes wheel-material and column-support contacts. ``Contact`` force remains physical; a reachable plan is not a zero-slip guarantee under arbitrary forces. Allow Hand Regrip and Vary Grip With ``Steering`` independently control repositioning and finger/pressure gestures.
+Regrip planning distinguishes wheel-material and column-support contacts. Contact force remains physical; a reachable plan is not a zero-slip guarantee under arbitrary forces. **Allow Hand Regrip** and **Vary Grip With Steering** independently control repositioning and finger/pressure gestures.
 
 Availability and attachment are distinct. An available hand can be released; an attached hand can be reserved by another owner. ``TryReserveHand`` accepts a live ``UnityEngine.Object`` and optional external palm frame. Only the same owner can update/release it. Destroyed owners return availability; destroying only the target leaves the reservation but removes its drives.
 
@@ -84,7 +80,7 @@ A failed reservation means another owner or the current state prevents the task.
 
 Assign the vehicle's ``SteeringHandRegrip`` and a stable target under the same vehicle. Call ``Begin``/``End`` for the task; the owner releases its reservation on disable.
 
-**Example: ``ReservedHandTask.cs``**
+**Example:** ``ReservedHandTask.cs``
 
 .. raw:: html
 
@@ -114,7 +110,7 @@ Assign the vehicle's ``SteeringHandRegrip`` and a stable target under the same v
        }
    }
 
-The external target is a palm contact frame. Use a ``VehicleHandle`` for a reusable scene control, or ``ControlInteraction``/``HandTransferHandle`` for committed out-and-back actions. Do not make several systems independently restore the same hand binding.
+The external target is a palm contact frame. Use a ``VehicleHandle`` for a reusable scene control, or ``ControlInteraction``/``vehicle.handles`` for committed out-and-back actions. Do not make several systems independently restore the same hand binding.
 
 .. _evs-scripting-gripsolving--complete-public-method-and-event-index:
 
@@ -145,8 +141,6 @@ AdaptiveHandGrip
 +-----------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
 | ``public virtual void Release()``                                                 | Releases this part or hand pose through its declaring type's ownership boundary.                                              |
 +-----------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetPalmPressure(float pressure)``                           | Sets normalized palm pressure and updates a bound adaptive hand when applicable.                                              |
-+-----------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-gripsolving--handgrip:
 
@@ -169,20 +163,14 @@ HandGrip
 | ``public virtual void DriveRotation(ConfigurableJoint joint, Rigidbody vehicle, Transform target, VehicleHandle handle, bool left, float contact = 1)`` | Applies the physical wrist rotational drive in the prepared hand/contact frame.   |
 +---------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------+
 
-.. _evs-scripting-gripsolving--imodule:
+.. _evs-scripting-gripsolving--ihandavailabilitysource:
 
-IModule
-~~~~~~~
+IHandAvailabilitySource
+~~~~~~~~~~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IHandAvailabilitySource <evs-api-gripsolving--ihandavailabilitysource>` gives the full declared contract.
 
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                     | Role                                                                                                                        |
-+============================================================================+=============================================================================================================================+
-| ``void Configure(VehicleController vehicle)``                              | Repeatable setup contract supplied with the owning ``VehicleController``.                                                   |
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+-  ``bool CanUseHand(PassengerSeat seat, PassengerBodyPart hand)`` — Reports whether the requested seat and hand are available for an interaction.
 
 .. _evs-scripting-gripsolving--ipassengerhandpose:
 
@@ -201,34 +189,20 @@ IPassengerHandPose
 | ``void Unbind()``                    | Releases the current source/hand association and its owned state.                            |
 +--------------------------------------+----------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-gripsolving--module:
+.. _evs-scripting-gripsolving--ivehiclemodule:
 
-Module
-~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                    | Role                                                                                                                                   |
-+===========================================================================================+========================================================================================================================================+
-| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                          | Role                                                                                                              |
-+===========================================================================+===================================================================================================================+
-| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                     | Role                                                                                                                        |
++============================================================================+=============================================================================================================================+
+| ``void Configure(VehicleController vehicle)``                              | Repeatable setup contract supplied with the owning ``VehicleController``.                                                   |
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+| ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
++----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-gripsolving--passengerbehaviour:
 
@@ -273,36 +247,48 @@ SteeringHandRegrip
 
 :ref:`SteeringHandRegrip <evs-api-gripsolving--steeringhandregrip>` gives the full declared contract.
 
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| Method                                                                                       | Role                                                                                      |
-+==============================================================================================+===========================================================================================+
-| ``public override void PreparePassenger(Passengers core, PassengerSeat passengerSeat)``      | Prepares this passenger behavior for an occupied seat.                                    |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual void PreparePose()``                                                        | Prepares steering hand pose state for the current passenger/control binding.              |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public override void RenderPassenger(Passengers core)``                                    | Advances render-time passenger presentation owned by this behavior/core.                  |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public override void ResetPassenger(Passengers core)``                                     | Resets this passenger behavior's state for the supplied seat.                             |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual bool IsHandAvailable(bool left)``                                           | Checks whether the selected steering hand is available under current reservation rules.   |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual bool IsHandOnWheel(bool left)``                                             | Reports whether the selected hand is currently attached to the steering control.          |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual Object HandOwner(bool left)``                                               | Returns the external Unity object that currently reserves the selected steering hand.     |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual Transform ColumnSupport(bool left)``                                        | Returns the steering hand's current column-support contribution.                          |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual float MaterialAngle(bool left)``                                            | Returns the selected hand's coordinate on the steering-wheel material.                    |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual bool IsFirmlySupported(bool left)``                                         | Reports whether the selected steering hand has firm support in the current contact state. |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual bool TryReserveHand(bool left, Object owner, Transform palmTarget = null)`` | Reserves a steering hand for a live owner and optional external palm frame.               |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual bool ReleaseHand(bool left, Object owner)``                                 | Releases a steering-hand reservation only for the matching owner.                         |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual bool ReleaseSteeringHand(bool left)``                                       | Temporarily releases steering attachment for the selected hand under the regrip policy.   |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual bool TakeSteeringHand(bool left)``                                          | Requests steering-hand attachment under the regrip/ownership policy.                      |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
-| ``public virtual bool TrySetLeadingHand(bool left)``                                         | Requests which hand leads steering regrip while respecting the current control state.     |
-+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------+
+-  ``public virtual bool CanUseHand(PassengerSeat requestedSeat, PassengerBodyPart hand)`` — Reports whether the requested seat and hand are available for an interaction.
+-  ``public virtual Transform ColumnSupport(bool left)`` — Current column support.
+-  ``public virtual Object HandOwner(bool left)`` — Current hand owner.
+-  ``public virtual bool IsFirmlySupported(bool left)`` — Current is firmly supported.
+-  ``public virtual bool IsHandAvailable(bool left)`` — Current is hand available.
+-  ``public virtual bool IsHandOnWheel(bool left)`` — // Reports whether the hand currently belongs to the wheel rather than an external reservation or transfer.
+-  ``public virtual float MaterialAngle(bool left)`` — // Returns the hand's unwrapped position on the rotating wheel material rather than a static world angle.
+-  ``public override void PreparePassenger(Passengers core, PassengerSeat passengerSeat)`` — Current prepare passenger.
+-  ``public virtual void PreparePose()`` — Current prepare pose.
+-  ``public virtual bool ReleaseHand(bool left, Object owner)`` — // Only the reserving owner can return the hand to steering.
+-  ``public virtual bool ReleaseSteeringHand(bool left)`` — Current release steering hand.
+-  ``public override void RenderPassenger(Passengers core)`` — Current render passenger.
+-  ``public override void ResetPassenger(Passengers core)`` — Current reset passenger.
+-  ``public virtual bool TakeSteeringHand(bool left)`` — // Reattaches an available hand at its current nearest rim point; capture stays compliant.
+-  ``public virtual bool TryReserveHand(bool left, Object owner, Transform palmTarget = null)`` — // Exclusively reserves a hand for another system. A null target releases its drives.
+-  ``public virtual bool TrySetLeadingHand(bool left)`` — Current try set leading hand.
+
+.. _evs-scripting-gripsolving--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                    | Role                                                                                                                                   |
++===========================================================================================+========================================================================================================================================+
+| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                          | Role                                                                                                              |
++===========================================================================+===================================================================================================================+
+| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+

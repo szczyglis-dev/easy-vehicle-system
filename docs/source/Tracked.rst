@@ -17,6 +17,48 @@ Tracked vehicles use wheel contacts for traction and steering, with optional seg
 
 **Inside Track Speed Ratio** controls inside-belt reduction. **Pivot Track Speed** and its response settings control stationary turning. Allow sufficient lateral tire slip for fixed road wheels to turn; tune Lateral Grip and optional lateral-stability settings after basic propulsion works. Engine power, brake torque and contact geometry also affect the result.
 
+.. _evs-tracked--tune-moving-turns-and-pivots:
+
+Tune moving turns and pivots
+----------------------------
+
+The side arrays live on ``Tracks``; turning policy lives in the selected ``TrackedProfile``. Do not tune belt animation to change the physical turn rate. Start with a known straight-road baseline before changing these groups:
+
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Profile group                                              | Effect                                                                        |
++============================================================+===============================================================================+
+| Steering Mix / Inside Track Speed Ratio                    | How strongly steering reduces the inside belt target during moving turns      |
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Steering Brake Torque                                      | Maximum per-wheel inside-belt speed-regulation braking                        |
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Pivot Track Speed                                          | Equal/opposite belt target at full stationary steering, in m/s                |
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Pivot Transition Time / Track Speed Response               | Blend into pivot behavior and belt target response                            |
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Turn Speed Compensation                                    | Raises the outside target to preserve more of the mean speed in a turn        |
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Redistribute Steering Torque                               | Routes unused inside drive to the outside within existing engine torque/power |
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Lateral Grip / Low Speed Turn Grip                         | Sideways scrub allowed by Friction, including powered launch release          |
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Lateral Stability / Maximum Lateral Stability Acceleration | Supported hull lateral damping with a bounded acceleration                    |
++------------------------------------------------------------+-------------------------------------------------------------------------------+
+
+At full steering, a smaller inside-speed ratio makes the moving turn tighter but demands more speed difference/scrub. Pivot speed is a target, not a guarantee the engine has enough power to achieve it. Shared service braking and handbrake take priority over steering drive/regulation.
+
+Use positive driven-wheel weights and sufficient usable engine output. Steering itself can request drive demand for a pivot, so a stationary turn is not merely rotating an otherwise unpowered Rigidbody. If the hull refuses to turn, inspect contact, brakes and lateral scrub before adding a larger engine.
+
+Low Speed Turn Grip blends toward ordinary tracked lateral grip as road speed rises. Lateral stability corrects supported sideways drift within contact/grip limits; it is separate from making each road wheel adhere without slip. Excessive lateral tire grip can fight the very skid steering the profile needs.
+
+.. _evs-tracked--side-membership:
+
+Side membership
+~~~~~~~~~~~~~~~
+
+Assign every mechanical road wheel explicitly to one side for predictable behavior. Empty side slots have geometric fallback for supported consumers, but partial/duplicate membership is difficult to reason about and should not be a model-authoring strategy. Keep left/right references inside this vehicle's wheel set, separate from visible rollers and link segments.
+
+Use :doc:`suspension </Suspension>` to get loaded contact distribution correct and :doc:`surfaces </Surfaces>` for physical friction. A visual path builder does not repair a side that has no traction support.
+
 .. _evs-tracked--2-prepare-the-track-model:
 
 2. Prepare the track model
@@ -74,3 +116,32 @@ Drive forward slowly and inspect both belts. Their lower runs should move toward
 For additional visible sprockets or rollers, add entries to **TrackVisuals → Rollers**. Assign each Transform, choose its left/right side, set its Radius and local rotation axis. Keep these rollers outside the builder's link collection. Mechanical road-wheel visuals may already be driven by their Wheel Setup and should not receive a second rotation owner.
 
 Visible belt speed follows the configured wheels' rim speed, including reverse and airborne wheelspin. Disabling TrackVisuals leaves the mechanical drive intact. See :doc:`Track scripting </Scripting/Tracks>` for custom setup and movement APIs.
+
+.. _evs-tracked--test-a-complete-tracked-vehicle:
+
+Test a complete tracked vehicle
+-------------------------------
+
+First disable TrackVisuals and verify the mechanics: straight forward/reverse, a moving left/right turn, a stationary pivot and a brake stop. Repeat on an incline and split-grip ground. Then enable the belt presentation and inspect direction/speed against each side's wheel RPM.
+
++-----------------------------------------------+--------------------------------------------------------------------------+
+| Symptom                                       | Check                                                                    |
++===============================================+==========================================================================+
+| Hull drives straight but will not turn        | Side assignments, inside speed/braking policy and excessive lateral grip |
++-----------------------------------------------+--------------------------------------------------------------------------+
+| Stationary steering does nothing              | Engine running/available torque, brake priority and pivot configuration  |
++-----------------------------------------------+--------------------------------------------------------------------------+
+| Turn loses more speed than desired            | Compensation/torque redistribution versus real power/contact limits      |
++-----------------------------------------------+--------------------------------------------------------------------------+
+| Hull drifts sideways after a turn             | Surface grip, tracked lateral settings and bounded lateral stability     |
++-----------------------------------------------+--------------------------------------------------------------------------+
+| Belt moves backward but mechanics are correct | That belt's Travel Direction sign                                        |
++-----------------------------------------------+--------------------------------------------------------------------------+
+| Links jump across the loop                    | Node order and corresponding Link indices, not the speed sign            |
++-----------------------------------------------+--------------------------------------------------------------------------+
+| Rollers jitter                                | Duplicate wheel/roller Transform animation owners                        |
++-----------------------------------------------+--------------------------------------------------------------------------+
+| Builder collects hull objects                 | Clean Links Parent or use an explicit list                               |
++-----------------------------------------------+--------------------------------------------------------------------------+
+
+For profile/side APIs, see :doc:`Track scripting </Scripting/Tracks>` and :doc:`API </API/Tracks>`. For gearbox, differential and TCS tuning, use their own guides; tune one drivetrain policy at a time rather than copying a road-car setup blindly.

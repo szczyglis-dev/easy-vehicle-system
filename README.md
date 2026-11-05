@@ -1,17 +1,15 @@
 # Easy Vehicle System
 
-**Current release:** 1.0.0 (2026-10-28)
-
-**Documentation:** https://easyvehiclesystem.readthedocs.io/en/latest/
-
 Easy Vehicle System is a modular vehicle package for Unity. It provides ready-to-use movement, physics and control systems for ground, air and water vehicles, with configurable passengers, interactive controls, damage and effects. Use it to build vehicles for your game with your own models, input and gameplay rules, or start from the supplied examples.
+
+**Full documentation:** https://easyvehiclesystem.readthedocs.io/en/latest/
 
 ## Version and compatibility
 
 | Item | Support |
 | --- | --- |
-| Version | **1.0.0** |
-| Unity | **Unity 6 — 6000.0 or newer** |
+| Version | **1.0.2** |
+| Unity | **Unity 6.0 LTS — 6000.0.84f1 or newer** |
 | Render pipelines | **Built-in Render Pipeline, Universal Render Pipeline (URP) and High Definition Render Pipeline (HDRP)** |
 | Input | Unity Input System **1.19.0** |
 
@@ -30,6 +28,12 @@ Vehicle mechanics are independent of the render pipeline. The supplied demo uses
 - **Damage, weapons and audiovisual effects.** Configure impacts, deformation of supported readable meshes, detachable parts and repair actions. Add aiming, projectiles, recoil, rockets and payload release, then combine engine and mechanical audio, tire smoke, skid marks, water effects and propulsion particles.
 - **Public APIs, events and ready-made examples.** Drive systems from your own scripts, read telemetry and react to typed events. Integrate custom input, components, characters and water providers using the API reference and complete C# examples. The Demo sample includes a selectable vehicle fleet and examples of the package's main systems.
 
+## Start building
+
+Read [Introduction and quick start](docs/source/Introduction.rst) for the setup sequence and full guide index, or go directly to [Getting started](docs/source/GettingStarted.rst).
+
+Explore the [demo vehicles](docs/source/Demo.rst), browse the [scripting reference](docs/source/Scripting/index.rst) and [public API](docs/source/API.rst), or consult [Troubleshooting](docs/source/Troubleshooting.rst). See [Installation and included content](docs/source/Distribution.rst) for import instructions and included folders.
+
 ## Links
 
 - GitHub, docs, issues, changelog: [Easy Vehicle System on GitHub](https://github.com/szczyglis-dev/easy-vehicle-system)
@@ -40,3 +44,11 @@ Vehicle mechanics are independent of the render pipeline. The supplied demo uses
 ## Author
 
 Marcin Szczygliński (szczyglis83@gmail.com)
+
+## Complete Inspector reference
+
+[All component settings](docs/source/InspectorReference.rst) — descriptions, declared defaults, Inspector limits, inherited settings and nested configuration for every package system and the demo components.
+
+## Demo credits
+
+Authors, licenses and available source URLs for the models and audio used in the demo are listed in [Credits](docs/Credits.md) and the documentation’s [Third-party credits](docs/source/ThirdParty.rst).

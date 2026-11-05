@@ -15,17 +15,17 @@ Implementation map
 +----------------------------+---------------------------------------------------------------------------+
 | Class                      | Responsibility                                                            |
 +============================+===========================================================================+
-| ``PassengerAccess``        | Owns the entry/exit state machine, reservation and cancellation.          |
+| ``AccessAnimationEvents``  | Relays animation access markers into the sequence.                        |
 +----------------------------+---------------------------------------------------------------------------+
-| ``SeatAccess``             | Describes the seat endpoint, outside marker, door and admission settings. |
+| ``AccessAnimationProfile`` | Stores animation states, references and timing configuration.             |
 +----------------------------+---------------------------------------------------------------------------+
 | ``AccessMotion``           | Abstract motion adapter for beginning, sampling and ending access.        |
 +----------------------------+---------------------------------------------------------------------------+
 | ``HumanoidAccessMotion``   | Built-in Animator-based humanoid access implementation.                   |
 +----------------------------+---------------------------------------------------------------------------+
-| ``AccessAnimationProfile`` | Stores animation states, references and timing configuration.             |
+| ``PassengerAccess``        | Owns the entry/exit state machine, reservation and cancellation.          |
 +----------------------------+---------------------------------------------------------------------------+
-| ``AccessAnimationEvents``  | Relays animation access markers into the sequence.                        |
+| ``SeatAccess``             | Describes the seat endpoint, outside marker, door and admission settings. |
 +----------------------------+---------------------------------------------------------------------------+
 
 ``PassengerAccess`` owns a reservation and the entry/exit state machine; ``AccessMotion`` owns character motion. ``SeatAccess`` stores the seat, outside endpoint, optional door, profile and admission/clearance settings.
@@ -41,7 +41,7 @@ Use ``Finished`` to release application UI locks, then inspect actual occupancy 
 
 ``TryEnter``/``TryExit`` return admission, not final occupancy/completion. ``State`` progresses through Opening, Moving and Closing. Entry commits occupancy after motion handover; exit releases seating before motion while retaining reservation. ``Finished``/completed/cancelled are distinct from seat ``Entered``/``Exited``.
 
-An outside marker supplies a feet-level endpoint and optional heading. Ground projection changes the effective endpoint without moving the marker. ``Exit`` clearance is an endpoint capsule check, not navigation or full-body obstacle avoidance.
+An outside marker supplies a feet-level endpoint and optional heading. Ground projection changes the effective endpoint without moving the marker. Exit clearance is an endpoint capsule check, not navigation or full-body obstacle avoidance.
 
 .. _evs-scripting-passengeraccess--animation-bindings:
 
@@ -50,7 +50,9 @@ Animation bindings
 
 ``HumanoidAccessMotion`` moves the character using an Animator-backed access sequence. The animation profile provides the reference frames and state/timing configuration; ``SeatAccess`` supplies the endpoint and optional door. The same character motion can therefore be reused with different seat endpoints if the authored geometry and animation remain compatible.
 
-``Configure`` the standing/seated reference states as well as enter/exit states. Root-motion orientation, useful clip range and transition settings must agree with the reference used for spatial matching. A clip that looks correct in isolation can still hand the character to the seat with an offset if its import or state setup differs from the reference.
+Configure the standing/seated reference states as well as enter/exit states. Root-motion orientation, useful clip range and transition settings must agree with the reference used for spatial matching. A clip that looks correct in isolation can still hand the character to the seat with an offset if its import or state setup differs from the reference.
+
+Use ``AccessAnimationProfile.useAnimatorRootMotion`` for unbaked Animator root tracks; ``rootMotionScale`` and ``rootMotionRotationWeight`` tune stride and turning. Disable it for movement baked into the skeleton. ``useFootIK`` independently enables ground-foot correction. Manual contact curves use normalized clip time, independently for each foot and direction. Inspector setup is described in :ref:`Animated access <evs-passengeraccess--adapt-a-clip-to-the-cabin>`.
 
 For another animation framework, derive ``AccessMotion`` instead of making ``PassengerAccess`` discover that framework. Implement admission, sampling, completion and cleanup there. Use ``CanPlay`` to reject incompatible access before reservation/motion becomes an abandoned partial operation.
 
@@ -60,7 +62,7 @@ Door markers are part of the same timeline. Verify that they fall inside the pla
 
 ``AccessAnimationProfile`` explicitly supplies controller/layer, standing/seated/enter/exit paths, triggers and matching Humanoid reference clips. The Animator owns playback; references calibrate spatial frames. The built-in adapter expects single-clip access states matching those references, not arbitrary Blend Trees.
 
-``Configure`` useful clip ranges, retained import orientation/position, state offsets/exit times, playback speed, transition allowance and completion timeout together. Profile door events must exist in the useful range and be delivered at playback. ``State`` transitions complete only after the terminal-state handover.
+Configure useful clip ranges, retained import orientation/position, state offsets/exit times, playback speed, transition allowance and completion timeout together. For a door starting closed, profile door events must exist in the useful range and be delivered at playback. Already-open and doorless paths need no door markers. ``State`` transitions complete only after the terminal-state handover.
 
 .. _evs-scripting-passengeraccess--request-and-observe-access:
 
@@ -69,7 +71,7 @@ Request and observe access
 
 Assign ``PassengerAccess`` on the character and a configured ``SeatAccess``. The named completion handler survives cancellation and is unsubscribed from the exact captured source.
 
-**Example: ``PassengerAccessButton.cs``**
+**Example:** ``PassengerAccessButton.cs``
 
 .. raw:: html
 
@@ -108,6 +110,126 @@ Assign ``PassengerAccess`` on the character and a configured ``SeatAccess``. The
        }
    }
 
+.. _evs-scripting-passengeraccess--directional-lifecycle-events:
+
+Directional lifecycle events
+----------------------------
+
+Use ``EnterBegin``, ``EnterInProgress``, ``EnterFinished``, ``EnterCancelled`` and the corresponding ``Exit...`` events to distinguish boarding from leaving. Begin runs after admission and ``BeforeEnter``/``BeforeExit`` checks, in Opening. Progress runs only in Moving, after sampling the motion. Finished means the complete operation succeeded, including any required door closure. Cancelled reports a reserved operation that failed or was interrupted; a request rejected before reservation emits no lifecycle events.
+
+``EnterInProgress``/``ExitInProgress`` supply a ``PassengerAccessProgress`` value: ``Context`` retains the original vehicle/passenger/seat, ``IsEntering`` gives the direction, ``NormalizedTime`` is nominal motion time from 0 to 1, and ``ElapsedTime``/``Duration`` are seconds. It starts at zero and can repeat one while animation blending, marker waits or final handover continue. Do not unlock controls or assume occupancy from progress alone. Progress callbacks can cancel; the old operation then stops before committing occupancy or publishing stale Inspector progress.
+
+The Inspector exposes the same directional lifecycle through ``onEnterBegin``, ``onEnterInProgress``, ``onEnterFinish``, ``onEnterCancelled`` and their ``onExit...`` counterparts. Progress is a dynamic float argument (0..1); the other Inspector callbacks have no arguments. Existing ``started``, ``completed``, ``cancelled``, ``Finished``, ``Before...``, ``After...`` and ``StateChanged`` remain available. Prefer one API family for each application action to avoid handling the same phase twice.
+
+The normal order is Before → Opening/started/directional Begin → Moving/progress → Closing → Idle/outcome cleanup → completed/Finished(success)/directional Finished → After. On failure, cancelled/Finished(false)/directional Cancelled/Cancelled replace the success notifications. A Before listener can veto a reserved attempt before directional Begin; cancellation is still reported. A begin callback that calls ``Cancel`` or disables the component is cleaned up after begin observers return, and the request returns false. Capture the context passed to a callback instead of reading ``Target`` after completion, because ``Target`` is already cleared.
+
+.. _evs-scripting-passengeraccess--handle-boarding-and-leaving-from-your-own-code:
+
+Handle boarding and leaving from your own code
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Add this component to an application object, assign the character's **Passenger Access** and the destination **Seat Access**, then call ``Enter``, ``Exit`` or ``Cancel`` from your input/gameplay code. ``ControlsLocked`` and ``MotionProgress`` can feed an application HUD or input gate. Ownership is decided from actual occupancy at the outcome, including cancellation rollback.
+
+**Example:** ``PassengerAccessLifecycle.cs``
+
+.. raw:: html
+
+   <!-- example: PassengerAccessLifecycle.cs -->
+
+.. code-block:: csharp
+
+   using UnityEngine;
+   using EasyVehicleSystem;
+
+   namespace VehicleDocumentationExamples
+   {
+       public class PassengerAccessLifecycle : MonoBehaviour
+       {
+           public PassengerAccess access;
+           public SeatAccess target;
+           public bool ControlsLocked { get; private set; }
+           public bool IsSeated { get; private set; }
+           public float MotionProgress { get; private set; }
+           private PassengerAccess subscribed;
+
+           private void OnEnable()
+           {
+               subscribed = access;
+               if (!subscribed) return;
+               subscribed.EnterBegin += OnBegin;
+               subscribed.ExitBegin += OnBegin;
+               subscribed.EnterInProgress += OnProgress;
+               subscribed.ExitInProgress += OnProgress;
+               subscribed.EnterFinished += OnEnterFinished;
+               subscribed.ExitFinished += OnExitFinished;
+               subscribed.EnterCancelled += OnCancelled;
+               subscribed.ExitCancelled += OnCancelled;
+               ControlsLocked = subscribed.IsBusy;
+               IsSeated = subscribed.passenger && subscribed.passenger.Seat;
+           }
+
+           private void OnDisable()
+           {
+               if (subscribed) {
+                   subscribed.EnterBegin -= OnBegin;
+                   subscribed.ExitBegin -= OnBegin;
+                   subscribed.EnterInProgress -= OnProgress;
+                   subscribed.ExitInProgress -= OnProgress;
+                   subscribed.EnterFinished -= OnEnterFinished;
+                   subscribed.ExitFinished -= OnExitFinished;
+                   subscribed.EnterCancelled -= OnCancelled;
+                   subscribed.ExitCancelled -= OnCancelled;
+               }
+               subscribed = null;
+               ControlsLocked = false;
+           }
+
+           // True means admitted. Outcome events decide whether the journey succeeded.
+           public bool Enter() => access && access.TryEnter(target);
+           public bool Exit() => access && access.TryExit();
+           public void Cancel() { if (access) access.Cancel(); }
+
+           private void OnBegin(PassengerSeatContext context)
+           {
+               ControlsLocked = true;
+               MotionProgress = 0;
+           }
+
+           private void OnProgress(PassengerAccessProgress progress)
+           {
+               MotionProgress = progress.NormalizedTime;
+               // progress.Context.Seat identifies the destination even after detachment.
+               // A value of one is not yet an EnterFinished/ExitFinished notification.
+           }
+
+           private void OnEnterFinished(PassengerSeatContext context)
+           {
+               UpdateOccupancy(context);
+               Debug.Log("Boarding finished: " + context.Seat.name);
+           }
+
+           private void OnExitFinished(PassengerSeatContext context)
+           {
+               UpdateOccupancy(context);
+               Debug.Log("Leaving finished: " + context.Seat.name);
+           }
+
+           private void OnCancelled(PassengerSeatContext context)
+           {
+               UpdateOccupancy(context);
+               Debug.Log("Access interrupted; currently seated: " + IsSeated);
+           }
+
+           private void UpdateOccupancy(PassengerSeatContext context)
+           {
+               ControlsLocked = false;
+               IsSeated = context.Passenger && context.Passenger.Seat;
+           }
+       }
+   }
+
+For the complete field/property/method signatures, see :doc:`the access API </API/PassengerAccess>` and :ref:`Inspector fields <evs-inspectorreference-world--passengeraccess>`. For all events grouped by their emitting class, see :ref:`Events reference <evs-scripting-eventsreference--passengeraccess>`.
+
 .. _evs-scripting-passengeraccess--cancellation-and-extension:
 
 Cancellation and extension
@@ -120,6 +242,13 @@ Use ``IsComplete``, ``GetDuration`` and ``CompletionTimeout`` coherently when th
 ``Cancel`` unwinds motion/reservation. Interrupted ordinary exit may reseat its own released occupant; external ejection is not undone. Already committed occupancy may remain after closure cancellation. Read actual occupancy in completion handlers.
 
 Derive from ``AccessMotion`` for navigation, another animation framework or whole-body clearance. Implement its completion/timeout contract. Derive ``SeatAccess`` for custom door admission/readiness. Do not infer the controlled player or target vehicle inside a reusable motion adapter.
+
+.. _evs-scripting-passengeraccess--context-bearing-access-hooks:
+
+Context-bearing access hooks
+----------------------------
+
+BeforeEnter/BeforeExit precede collision preparation and door/motion side effects; AfterEnter/AfterExit report whole-sequence success. Cancelled supplies the same original PassengerSeatContext after failed/cancelled cleanup. These are separate from immediate seat occupancy hooks. See :ref:`the access lifecycle guide <evs-passengeraccess--before-and-after-the-whole-access-sequence>`.
 
 .. _evs-scripting-passengeraccess--complete-public-method-and-event-index:
 
@@ -135,13 +264,15 @@ AccessAnimationEvents
 
 :ref:`AccessAnimationEvents <evs-api-passengeraccess--accessanimationevents>` gives the full declared contract.
 
-+-------------------------------------------+-----------------------------------------------------------------------------+
-| Method                                    | Role                                                                        |
-+===========================================+=============================================================================+
-| ``public virtual void AccessOpenDoor()``  | Delivers an animation marker requesting opening of the current access door. |
-+-------------------------------------------+-----------------------------------------------------------------------------+
-| ``public virtual void AccessCloseDoor()`` | Delivers an animation marker requesting closure of the current access door. |
-+-------------------------------------------+-----------------------------------------------------------------------------+
++-------------------------------------------------+---------------------------------------------------------------------------------+
+| Method                                          | Role                                                                            |
++=================================================+=================================================================================+
+| ``public virtual void AccessOpenDoor()``        | Delivers an animation marker requesting opening of the current access door.     |
++-------------------------------------------------+---------------------------------------------------------------------------------+
+| ``public virtual void AccessWaitForOpenDoor()`` | Holds the animation until the actual door opens or Door Timeout cancels access. |
++-------------------------------------------------+---------------------------------------------------------------------------------+
+| ``public virtual void AccessCloseDoor()``       | Delivers an animation marker requesting closure of the current access door.     |
++-------------------------------------------------+---------------------------------------------------------------------------------+
 
 .. _evs-scripting-passengeraccess--accessmotion:
 
@@ -210,19 +341,74 @@ PassengerAccess
 | ``public virtual void Cancel()``                    | Unwinds this access attempt's motion/reservation and performs its state-specific occupancy cleanup. Already committed occupancy need not be undone.  |
 +-----------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-+--------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                   | Role                                                                                                                                 |
-+====================================================================+======================================================================================================================================+
-| ``public event Action<PassengerAccess, AccessState> StateChanged`` | When access sequencing changes. Payload: ``PassengerAccess`` and ``AccessState``; seat occupancy may commit at a different boundary. |
-+--------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<PassengerAccess, bool> Finished``            | When an access attempt ends. Payload: ``PassengerAccess`` and success bool; inspect actual occupancy after cancellation/handover.    |
-+--------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
-| ``public UnityEvent started``                                      | Inspector callback when access sequencing starts; no payload.                                                                        |
-+--------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
-| ``public UnityEvent completed``                                    | Inspector callback when access succeeds; no payload.                                                                                 |
-+--------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
-| ``public UnityEvent cancelled``                                    | Inspector callback when access is cancelled; no payload.                                                                             |
-+--------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                   | Role                                                                                                                                                                         |
++====================================================================+==============================================================================================================================================================================+
+| ``public event Action<PassengerSeatContext> EnterBegin``           | Once an admitted entry starts in Opening, after Before checks; seat reservation is held.                                                                                     |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent onEnterBegin``                                 | Inspector counterpart of ``EnterBegin``; no payload.                                                                                                                         |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerAccessProgress> EnterInProgress``   | After each entry motion sample in Moving, starting at zero; progress one is not whole-sequence completion.                                                                   |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent<float> onEnterInProgress``                     | Inspector counterpart of ``EnterInProgress``; receives normalized motion time (0..1).                                                                                        |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> EnterFinished``        | Only after the entire entry succeeds, including the required door state and reservation/Target cleanup.                                                                      |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent onEnterFinish``                                | Inspector counterpart of ``EnterFinished``; no payload.                                                                                                                      |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> EnterCancelled``       | After a reserved entry is cancelled or fails and cleanup finishes; an immediately rejected request emits nothing.                                                            |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent onEnterCancelled``                             | Inspector counterpart of ``EnterCancelled``; no payload.                                                                                                                     |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> ExitBegin``            | Once an admitted exit starts in Opening, after Before checks; seat reservation is held.                                                                                      |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent onExitBegin``                                  | Inspector counterpart of ``ExitBegin``; no payload.                                                                                                                          |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerAccessProgress> ExitInProgress``    | After each exit motion sample in Moving, starting at zero; progress one is not whole-sequence completion.                                                                    |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent<float> onExitInProgress``                      | Inspector counterpart of ``ExitInProgress``; receives normalized motion time (0..1).                                                                                         |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> ExitFinished``         | Only after the entire exit succeeds, including the required door state and reservation/Target cleanup.                                                                       |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent onExitFinish``                                 | Inspector counterpart of ``ExitFinished``; no payload.                                                                                                                       |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> ExitCancelled``        | After a reserved exit is cancelled or fails and cleanup finishes; an immediately rejected request emits nothing.                                                             |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent onExitCancelled``                              | Inspector counterpart of ``ExitCancelled``; no payload.                                                                                                                      |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> BeforeEnter``          | Before collision preparation, door requests and entry motion, after reservation succeeds. Payload: immutable PassengerSeatContext.                                           |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> AfterEnter``           | After the complete entry sequence succeeds and the reservation/Target are cleared. Payload: immutable PassengerSeatContext.                                                  |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> BeforeExit``           | Before collision preparation, door requests and exit motion, while occupancy is retained. Payload: immutable PassengerSeatContext.                                           |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> AfterExit``            | After the complete exit sequence succeeds and the reservation/Target are cleared. Payload: immutable PassengerSeatContext.                                                   |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> Cancelled``            | After a started/prepared sequence is cancelled and the reservation/Target are cleared; context retains the original seat/passenger. Payload: immutable PassengerSeatContext. |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerAccess, AccessState> StateChanged`` | When access sequencing changes. Payload: ``PassengerAccess`` and ``AccessState``; seat occupancy may commit at a different boundary.                                         |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerAccess, bool> Finished``            | When an access attempt ends. Payload: ``PassengerAccess`` and success bool; inspect actual occupancy after cancellation/handover.                                            |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent started``                                      | Inspector callback when access sequencing starts; no payload.                                                                                                                |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent completed``                                    | Inspector callback when access succeeds; no payload.                                                                                                                         |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent cancelled``                                    | Inspector callback when access is cancelled; no payload.                                                                                                                     |
++--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-passengeraccess--passengeraccessprogress:
+
+PassengerAccessProgress
+~~~~~~~~~~~~~~~~~~~~~~~
+
+:ref:`PassengerAccessProgress <evs-api-passengeraccess--passengeraccessprogress>` describes the value properties used by progress listeners.
+
++--------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                                                                     | Role                                                                                                                |
++============================================================================================================================================+=====================================================================================================================+
+| ``public PassengerAccessProgress(PassengerSeatContext context, bool isEntering, float normalizedTime, float elapsedTime, float duration)`` | Constructs an immutable progress sample with captured identities, direction, normalized time and timing in seconds. |
++--------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-passengeraccess--seataccess:
 

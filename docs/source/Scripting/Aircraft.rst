@@ -5,40 +5,40 @@ Aircraft force, controls and landing gear
 
 Aircraft motion combines a flight strategy, shared engine/input mechanics and separately authored control surfaces and landing gear. The flight profile decides how commands become body forces and torques. Exterior components present those decisions and coordinate ground contacts.
 
-Choose the movement family from the intended control behavior before tuning the mesh animation. Assisted flight, body-rate aerobatics and jet response are different strategies; changing how far a rendered elevator rotates does not change the authority of those strategies.
+Choose the movement family from the intended control behavior before tuning the mesh animation. Assisted flight, body-rate aerobatics and jet response are parameter combinations in one fixed-wing strategy; changing how far a rendered elevator rotates does not change the authority of those strategies.
 
 .. _evs-scripting-aircraft--implementation-map:
 
 Implementation map
 ------------------
 
-+-------------------------------+--------------------------------------------------------------------------+
-| Class                         | Responsibility                                                           |
-+===============================+==========================================================================+
-| ``HelicopterProfile``         | Supplies rotor-spooled lift, tilt-driven movement and altitude hold.     |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``HoverProfile``              | Supplies direct thrust, strafe, clearance support and assisted leveling. |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``Propulsion``                | Supplies rotor/propeller visuals and shared spool state.                 |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``HoverVisuals``              | Applies configured hover mount and wheel tilt.                           |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``AirplaneProfile``           | Defines assisted airplane movement and aircraft configuration.           |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``AerobaticAirplaneProfile``  | Defines body-rate airplane control without auto-leveling.                |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``JetProfile``                | Adds jet-specific aerodynamic response and limits.                       |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``AirplaneGroundContact``     | ``Tracks`` ground support and ground/air authority blending.             |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``AircraftControlSurfaces``   | Presents the configured control-surface motion.                          |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``LandingGear``               | Owns deployment sequencing and physical gear-contact availability.       |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``LandingGearPart``           | Maps deployment progress to a door/strut pose.                           |
-+-------------------------------+--------------------------------------------------------------------------+
-| ``LandingGearSuspensionPart`` | Describes load-driven hinge response for a gear part.                    |
-+-------------------------------+--------------------------------------------------------------------------+
++-------------------------------+---------------------------------------------------------------------------+
+| Class                         | Responsibility                                                            |
++===============================+===========================================================================+
+| ``AerobaticAirplaneProfile``  | Supplies body-rate preset defaults; inherits all behavior.                |
++-------------------------------+---------------------------------------------------------------------------+
+| ``AircraftControlSurfaces``   | Presents the configured control-surface motion.                           |
++-------------------------------+---------------------------------------------------------------------------+
+| ``AirplaneGroundContact``     | Tracks ground support and ground/air authority blending.                  |
++-------------------------------+---------------------------------------------------------------------------+
+| ``AirplaneProfile``           | Owns all fixed-wing flight logic and editable configuration.              |
++-------------------------------+---------------------------------------------------------------------------+
+| ``HelicopterProfile``         | Supplies rotor-spooled lift, tilt-driven movement and altitude hold.      |
++-------------------------------+---------------------------------------------------------------------------+
+| ``HoverProfile``              | Supplies direct thrust, strafe, clearance support and assisted leveling.  |
++-------------------------------+---------------------------------------------------------------------------+
+| ``HoverVisuals``              | Applies configured hover mount and wheel tilt.                            |
++-------------------------------+---------------------------------------------------------------------------+
+| ``JetProfile``                | Supplies relative-airflow fighter preset defaults; inherits all behavior. |
++-------------------------------+---------------------------------------------------------------------------+
+| ``LandingGear``               | Owns deployment sequencing and physical gear-contact availability.        |
++-------------------------------+---------------------------------------------------------------------------+
+| ``LandingGearPart``           | Maps deployment progress to a door/strut pose.                            |
++-------------------------------+---------------------------------------------------------------------------+
+| ``LandingGearSuspensionPart`` | Describes load-driven hinge response for a gear part.                     |
++-------------------------------+---------------------------------------------------------------------------+
+| ``Propulsion``                | Supplies rotor/propeller visuals and shared spool state.                  |
++-------------------------------+---------------------------------------------------------------------------+
 
 .. _evs-scripting-aircraft--flight-families:
 
@@ -59,7 +59,7 @@ Airplane uses assisted pitch/bank and flight-path behavior. ``AerobaticAirplane`
 
 ``AirplaneGroundContact`` records native contact, applies takeoff grace, and blends ground/air authority. Gear wheels are free rolling: set ``Drive`` off. Tire feedback can include the contact-relative touchdown spin-up difference. Ground steering/brakes apply only through applicable contact handling.
 
-``Engine``/thrust, flight response and visible control motion are separate responsibilities. ``AircraftControlSurfaces`` animates hinge references; it does not calculate aerodynamic authority from rendered flap geometry.
+Engine/thrust, flight response and visible control motion are separate responsibilities. ``AircraftControlSurfaces`` animates hinge references; it does not calculate aerodynamic authority from rendered flap geometry.
 
 .. _evs-scripting-aircraft--helicopter-and-hover-movement:
 
@@ -85,21 +85,21 @@ The two normalized conventions serve different consumers: retraction grows towar
 
 ``LandingGear`` owns parts and native wheel contacts. Retraction can be rejected by grounded/clearance policy or suspension alignment. Fully deployed gear enables physical wheel contact; hull colliders remain the belly envelope when retracted.
 
-+-----------------------------------------------------+---------------------------------------------------+
-| API                                                 | Meaning                                           |
-+=====================================================+===================================================+
-| ``SetDeployed`` / ``Toggle``                        | Requested sequence, returns acceptance            |
-+-----------------------------------------------------+---------------------------------------------------+
-| ``LandingGearPart.SetRetraction``                   | 0 deployed, 1 retracted                           |
-+-----------------------------------------------------+---------------------------------------------------+
-| ``LandingGearPart.SetValue`` / ``DeployedFraction`` | 1 deployed, 0 retracted                           |
-+-----------------------------------------------------+---------------------------------------------------+
-| ``CaptureDeployedPose``                             | Capture the authored model baseline               |
-+-----------------------------------------------------+---------------------------------------------------+
-| ``ResetGear``                                       | Immediate explicit reset, bypassing interlocks    |
-+-----------------------------------------------------+---------------------------------------------------+
-| ``LandingGearSuspension.ResetSuspension``           | ``Clear`` load-driven hinge displacement/velocity |
-+-----------------------------------------------------+---------------------------------------------------+
++-----------------------------------------------------+------------------------------------------------+
+| API                                                 | Meaning                                        |
++=====================================================+================================================+
+| ``SetDeployed`` / ``Toggle``                        | Requested sequence, returns acceptance         |
++-----------------------------------------------------+------------------------------------------------+
+| ``LandingGearPart.SetRetraction``                   | 0 deployed, 1 retracted                        |
++-----------------------------------------------------+------------------------------------------------+
+| ``LandingGearPart.SetValue`` / ``DeployedFraction`` | 1 deployed, 0 retracted                        |
++-----------------------------------------------------+------------------------------------------------+
+| ``CaptureDeployedPose``                             | Capture the authored model baseline            |
++-----------------------------------------------------+------------------------------------------------+
+| ``ResetGear``                                       | Immediate explicit reset, bypassing interlocks |
++-----------------------------------------------------+------------------------------------------------+
+| ``LandingGearSuspension.ResetSuspension``           | Clear load-driven hinge displacement/velocity  |
++-----------------------------------------------------+------------------------------------------------+
 
 A gear part's independent anchor defines the pivot; signed maximum is retraction relative to deployed pose. The part retains its mesh's deployed offset. Extension/retraction delays coordinate doors and struts.
 
@@ -114,7 +114,7 @@ A spawn/reset tool can intentionally use the immediate reset API. Use it only fo
 
 Assign ``LandingGear`` and call ``SetGear`` from an Input Action/UI/AI adapter. Rejected requests leave the mechanic in control of its actual state.
 
-**Example: ``LandingGearControl.cs``**
+**Example:** ``LandingGearControl.cs``
 
 .. raw:: html
 
@@ -174,18 +174,17 @@ AerobaticAirplaneProfile
 
 :ref:`AerobaticAirplaneProfile <evs-api-aircraft--aerobaticairplaneprofile>` gives the full declared contract.
 
-+---------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| Method                                                        | Role                                                                                                            |
-+===============================================================+=================================================================================================================+
-| ``public override void Configure(VehicleController vehicle)`` | Runs airplane family setup, then raises the native angular-velocity allowance for configured body-rate control. |
-+---------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+====== ====
+Method Role
+====== ====
+====== ====
 
 .. _evs-scripting-aircraft--aircraftcontrolmotion:
 
 AircraftControlMotion
 ~~~~~~~~~~~~~~~~~~~~~
 
-:ref:`AircraftControlMotion <evs-api-interior--aircraftcontrolmotion>` gives the full declared contract.
+:ref:`AircraftControlMotion <evs-api-aircraft--aircraftcontrolmotion>` gives the full declared contract.
 
 +----------------------------------------------------+------------------------------------------------------------------------------------------+
 | Method                                             | Role                                                                                     |
@@ -246,15 +245,15 @@ AirplaneGroundContact
 
 :ref:`AirplaneGroundContact <evs-api-aircraft--airplanegroundcontact>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                            |
-+============================================================================================+=================================================================================================================+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Counts operational native gear contacts, updates airborne/takeoff grace and blends ground/flight authority.     |
-+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``public override void Configure(VehicleController vehicle)``                              | Restores prior contact material state, resets ground/air history and prepares applicable ground contact policy. |
-+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                            |
-+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                                               |
++============================================================================================+====================================================================================================================================+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Counts operational gear contacts, including tire-tread support, updates airborne/takeoff grace and blends ground/flight authority. |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Configure(VehicleController vehicle)``                              | Restores prior contact material state, resets ground/air history and prepares applicable ground contact policy.                    |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                               |
++--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-aircraft--airplaneprofile:
 
@@ -266,13 +265,19 @@ AirplaneProfile
 +--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                     | Role                                                                                                                                |
 +============================================================================================+=====================================================================================================================================+
-| ``public override void Configure(VehicleController vehicle)``                              | Ensures propulsion/ground-contact helpers and writes aircraft-owned engine, steering, braking, grip/travel and suspension settings. |
+| ``public override bool CanUsePropulsionBoost(VehicleController vehicle)``                  | Checks the profile propulsion switch and required water/support context before activation.                                          |
 +--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Applies assisted aircraft thrust/lift/attitude response using current speed and ground-contact authority.                           |
+| ``public override float ResolveBoostDemand(VehicleController vehicle, Command command)``   | Returns finite normalized propulsion/collective intent for boost admission; each profile selects relevant axes.                     |
 +--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
 | ``public override float ResolveDriveDemand(VehicleController vehicle, Command command)``   | Maps the command and strategy state to propulsion demand for surrounding mechanics.                                                 |
 +--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
 | ``public override float ResolveExternalDriveIntent(VehicleController vehicle)``            | Returns signed non-wheel propulsion intent used by shared coasting/contact policy.                                                  |
++--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Configure(VehicleController vehicle)``                              | Ensures propulsion/ground-contact helpers and writes aircraft-owned engine, steering, braking, grip/travel and suspension settings. |
++--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Runs the common fixed-wing physics pipeline using the configured control and aerodynamic models.                                    |
++--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual Vector3 PressureDragAcceleration(Transform frame, Vector3 velocity)``     | Evaluates jet pressure-drag acceleration from the supplied speed/state.                                                             |
 +--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-aircraft--driveprofile:
@@ -318,13 +323,17 @@ HelicopterProfile
 
 :ref:`HelicopterProfile <evs-api-aircraft--helicopterprofile>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                   |
-+============================================================================================+========================================================================================================+
-| ``public override void Configure(VehicleController vehicle)``                              | Ensures a Propulsion helper exists for helicopter presentation/spool integration.                      |
-+--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Applies resistance, spool-dependent powered support, lift/height hold and commanded helicopter motion. |
-+--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------+
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                            |
++============================================================================================+=================================================================================================================+
+| ``public override bool CanUsePropulsionBoost(VehicleController vehicle)``                  | Checks the profile propulsion switch and required water/support context before activation.                      |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public override float ResolveBoostDemand(VehicleController vehicle, Command command)``   | Returns finite normalized propulsion/collective intent for boost admission; each profile selects relevant axes. |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public override void Configure(VehicleController vehicle)``                              | Ensures a Propulsion helper exists for helicopter presentation/spool integration.                               |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Applies resistance, spool-dependent powered support, lift/height hold and commanded helicopter motion.          |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-aircraft--hovervisuals:
 
@@ -341,12 +350,12 @@ HoverVisuals
 | ``public virtual Quaternion GetWheelTilt(WheelSetup wheel, HoverProfile profile)`` | Returns the wheel's hover-transition presentation tilt.                 |
 +------------------------------------------------------------------------------------+-------------------------------------------------------------------------+
 
-.. _evs-scripting-aircraft--imodule:
+.. _evs-scripting-aircraft--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -363,13 +372,10 @@ JetProfile
 
 :ref:`JetProfile <evs-api-aircraft--jetprofile>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                              |
-+============================================================================================+===================================================================================================+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Applies jet flight response, pressure/parasite/induced drag and bounded lift/trajectory behavior. |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public virtual Vector3 PressureDragAcceleration(Transform frame, Vector3 velocity)``     | Evaluates jet pressure-drag acceleration from the supplied speed/state.                           |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
+====== ====
+Method Role
+====== ====
+====== ====
 
 .. _evs-scripting-aircraft--landinggear:
 
@@ -436,12 +442,33 @@ LandingGearSuspension
 | ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Uses native wheel load to advance each leg's bounded angular spring/damper/inertia model.                                 |
 +--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-aircraft--module:
+.. _evs-scripting-aircraft--propulsion:
 
-Module
-~~~~~~
+Propulsion
+~~~~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`Propulsion <evs-api-aircraft--propulsion>` gives the full declared contract.
+
++----------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| Method                                                         | Role                                                                                               |
++================================================================+====================================================================================================+
+| ``public override void Configure(VehicleController owner)``    | Stores the owner and resolves missing hull/engine references used by spool/propeller presentation. |
++----------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)`` | Checks movement-family compatibility; this is independent of the Unity enabled flag.               |
++----------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
+
++---------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+| Event / callback                            | Role                                                                                                                             |
++=============================================+==================================================================================================================================+
+| ``public event Action<float> SpeedChanged`` | When resolved propulsion presentation speed changes. Payload: the component's current speed value; it does not set engine power. |
++---------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-aircraft--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -464,24 +491,3 @@ Module
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-aircraft--propulsion:
-
-Propulsion
-~~~~~~~~~~
-
-:ref:`Propulsion <evs-api-aircraft--propulsion>` gives the full declared contract.
-
-+----------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
-| Method                                                         | Role                                                                                               |
-+================================================================+====================================================================================================+
-| ``public override void Configure(VehicleController owner)``    | Stores the owner and resolves missing hull/engine references used by spool/propeller presentation. |
-+----------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
-| ``public override bool SupportsProfile(DriveProfile profile)`` | Checks movement-family compatibility; this is independent of the Unity enabled flag.               |
-+----------------------------------------------------------------+----------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
-| Event / callback                            | Role                                                                                                                             |
-+=============================================+==================================================================================================================================+
-| ``public event Action<float> SpeedChanged`` | When resolved propulsion presentation speed changes. Payload: the component's current speed value; it does not set engine power. |
-+---------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+

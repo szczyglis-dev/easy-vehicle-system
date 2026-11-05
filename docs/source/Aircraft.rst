@@ -26,6 +26,19 @@ Choose a flight profile
 
 A drone is a vehicle configuration rather than a separate profile. Use **Hover** for direct movement and strafing, or **Helicopter** when horizontal movement should come from body tilt. The number and placement of visible rotors are configured separately from the movement profile.
 
+.. _evs-aircraft--one-configurable-fixed-wing-model:
+
+One configurable fixed-wing model
+---------------------------------
+
+All fixed-wing physics lives in ``AirplaneProfile``. **Airplane**, **Aerobatic Airplane** and **Jet** are initial parameter presets; the latter two only set constructor defaults and inherit the same implementation. Existing preset type names remain available for saved profiles.
+
+In the Inspector, **Control Mode** selects assisted pitch/bank targets or unrestricted body rates. **Aerodynamics** independently selects simplified lift/alignment or relative-airflow forces. **Progressive Thrust Envelope**, bank compensation, minimum air control authority, rate coordinated turn assistance and G/yaw limiters are editable on every preset. The remaining engine, landing-gear, lift, drag and response parameters are shared too.
+
+To turn a Jet into an assisted light aircraft, select **Assisted Attitude** and **Simplified**, disable **Progressive Thrust Envelope**, enable **Bank Compensation Enabled**, set **Minimum Air Control Authority** to zero and tune engine power, acceleration, speed limits and gear settings for the airframe. To reproduce another preset exactly, copy all its settings: changing the two model selectors alone does not replace its tuning. Configure the vehicle again after changing engine, gear or rate settings.
+
+The supplied Airplane and Jet prefabs explicitly store these settings in both the imported demo and ``Samples~``. The demo scenes inherit their aircraft configuration from those prefabs.
+
 .. _evs-aircraft--create-an-aircraft:
 
 Create an aircraft
@@ -40,6 +53,8 @@ Create an aircraft
 
 Hover and Helicopter profiles do not require Wheel Setup entries. For fixed-wing aircraft, configure the profile's **Use Landing Gear** option according to whether the airframe has physical gear wheels.
 
+To suspend vehicle forces and assistance, see :ref:`Release and restore all vehicle forces <evs-driveprofiles--release-and-restore-all-vehicle-forces>`.
+
 .. _evs-aircraft--airplanes-and-jets:
 
 Airplanes and jets
@@ -47,9 +62,13 @@ Airplanes and jets
 
 Configure mass, engine power, thrust, lift speed and flight-control response in **Setup**. Create landing-gear wheels as described in :ref:`Getting started <evs-gettingstarted--create-your-first-wheel-vehicle>`. Turn **Drive** off on every gear wheel: aircraft propulsion acts on the body, not through driven wheels. Assign taxi steering and braking to the appropriate wheels.
 
-Configure suspension, tire grip, braking and ground steering, then apply vehicle configuration. Check taxiing, takeoff, engine-off glide and landing before adding cockpit animation.
+Configure suspension, tire grip, braking and ground steering, then apply vehicle configuration. **Ground Steering Rate** controls keyboard taxi steering in both directions and the return to centre. The cockpit yoke and stick follow the same resolved taxi steering without a second visual delay. **Minimum Ground Turn Radius** still defines the low-speed geometry limit. An idle analog fallback does not override that return; active gamepad/joystick steering retains its direct analog response. Check taxiing, takeoff, engine-off glide and landing before adding cockpit animation.
 
-The shared wheel modules handle runway contact. ``AirplaneGroundContact`` exposes ``IsAirborne`` and ``FlightBlend``; takeoff contact grace and transition times control blending between ground and flight handling. Tire smoke, marks and audio use the same contact feedback as ground vehicles.
+The supplied keyboard input uses **Space** for wheel service brakes and **Left Alt** for the parking brake. Both lower retained keyboard throttle; parking commands also suppress aircraft thrust for external and analog inputs. Releasing the brake keeps the reduced throttle. A wheel-brake request remains active through takeoff/touchdown contact transitions; airborne wheels receive brake torque but cannot stop the airframe without ground contact.
+
+Enable **Allow Ground Reverse** in the airplane/jet profile (default off), with landing gear and positive **Ground Reverse Speed/Acceleration**. Hold **Ground Reverse Key** (default Z) to reverse on the ground.
+
+The shared wheel modules handle runway contact, including native suspension and supported tire-tread contact. ``AirplaneGroundContact`` exposes ``IsAirborne`` and ``FlightBlend``; takeoff contact grace and transition times control blending between ground and flight handling. Tire smoke, marks and audio use the same contact feedback as ground vehicles.
 
 .. _evs-aircraft--tune-the-flight-envelope:
 
@@ -92,27 +111,33 @@ Choose **Hover** for a drone, hovering platform or flying car that should move d
 
 With neutral lift input, gravity compensation and damping reduce vertical drift. Hover does not use the Helicopter profile's captured-altitude hold. If an Engine is installed, its running state controls whether the Hover profile applies powered movement.
 
-Hover configuration ensures ``HoverVisuals`` exists. Add rotor or engine mounts to its tilt entries and set their neutral poses. For spinning rotors, add/configure ``Propulsion`` and assign each visible rotor separately. Wheel Tilt Response and wheel thrust/steering tilt settings control visual wheel lean on hover-capable cars; they do not change the wheel's authored neutral orientation.
+Hover configuration ensures ``HoverVisuals`` exists. Add rotor or engine mounts to its tilt entries and set their neutral poses. Use ``Propulsion`` for spinning rotor/propeller meshes and ``PropulsionJets`` for visual thrust outlets. Tune actual thrust and attitude forces in the drive profile. Wheel Tilt Response and wheel thrust/steering tilt settings control visual wheel lean on hover-capable cars; they do not change the wheel's authored neutral orientation.
 
 ``KeyboardFlightInput`` uses W/S for forward/reverse thrust, A/D for yaw, Q/E for sideways movement and Shift/Ctrl for ascend/descend. Custom providers use ``Command.Throttle``, ``Steering`` or ``Yaw``, ``Strafe`` and ``Lift``.
 
-For a drive/hover vehicle, register both strategies in ``ProfileSwitcher`` and assign a bidirectional ``HoverDriveTransition`` to their IDs. The supplied Car/Porsche uses drive ↔ hover to fold wheels and restore road contact. See :doc:`Changing movement modes </Media>`.
+For a drive/hover vehicle, register both strategies in ``ProfileSwitcher`` and assign a bidirectional ``HoverDriveTransition`` to their IDs. The supplied Car/Porsche uses drive ↔ hover to fold wheels and restore road contact. See :doc:`Combined vehicles </CombinedVehicles>`.
 
 .. _evs-aircraft--animate-cockpit-and-exterior-controls:
 
 Animate cockpit and exterior controls
 -------------------------------------
 
--  **Yoke:** assign the rotating pivot and pitch slide to ``YokeAnimator``. Place their neutral anchors at the actual column axes, then set roll angle, pitch travel and response.
--  **Stick:** use ``SteeringStickAnimator`` with ``StickSetup`` for pitch and roll. Assign the grip surface and its hand anchors. Configure a separate rest or throttle target for the other hand.
--  **Throttle:** configure ``ThrottleAnimator`` and the handle's moving pivot/neutral anchor. ``SetThrottle(0..1)`` controls visual position; ``FollowVehicle()`` resumes automatic presentation. Request engine thrust through the input provider.
--  **Control surfaces:** add ``AircraftControlSurface`` to each moving surface, configure its hinge, axis and direction, then register it in ``AircraftControlSurfaces.surfaces``.
+For yokes, sticks, throttle levers and their passenger contacts, use the full :ref:`aircraft cockpit workflow <evs-interiorcontrols--aircraft-sticks-yokes-and-throttle-levers>`. That guide owns pivots, ranges, animation ownership and hand binding, so those instructions are not repeated here. A cockpit animation does not provide the flight command itself.
 
-``AircraftControlMotion`` supports rotation in degrees or translation in metres around an independent neutral anchor. ``SetValue(0..1)`` applies an absolute pose. Keep imported mesh corrections below the moving pivot.
+.. _evs-aircraft--exterior-control-surfaces:
 
-Use ``AircraftControlSurfaces.SetControls(pitch, roll, yaw)`` for external presentation, ``FollowVehicle()`` for vehicle input, and ``SetFlaps`` / ``SetAirbrake`` for the additional channels. Surface animation does not change drive-profile aerodynamic authority.
+Exterior control surfaces
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Fit hand anchors and grip thickness to your control geometry and character; see :doc:`Seats and handles </SeatsAndHandles>` and :doc:`Grip calibration </SteeringHandGrip>`. Use the seated preview after editing the targets.
+1. Add ``AircraftControlSurface`` to each independently moving aileron, elevator, rudder, flap or airbrake assembly.
+2. Configure its moving part, independent hinge frame, local axis and travel/direction for the model, then select **Type** (Rudder, left/right Aileron, Elevator, Flap, Airbrake or Custom). Use **Invert** for the needed sign; Custom mixes Pitch/Roll/Yaw through **Custom Mix**.
+3. Add/register ``AircraftControlSurfaces`` and fill its **Surfaces** list with those helpers.
+4. Test positive/negative pitch, roll and yaw separately. Opposite-side ailerons normally need opposing travel; do not rotate the airframe just to correct one mesh's sign.
+5. Add flap/airbrake presentation and check full combinations for geometry clearance.
+
+Use ``AircraftControlSurfaces.SetControls(pitch, roll, yaw)`` for external presentation, ``FollowVehicle()`` to resume command following, and ``SetFlaps`` / ``SetAirbrake`` for the additional channels. These animate geometry; they do not change the profile's aerodynamic authority. Change lift/drag/control policy in the flight strategy when the game requires a physical flap/airbrake effect.
+
+Keep only one Transform writer on each surface. Flight can still work without animated surfaces because the built-in profile applies body forces independently; a moving aileron alone does not prove the correct roll input reached the vehicle.
 
 .. _evs-aircraft--retractable-landing-gear:
 
@@ -154,3 +179,74 @@ Assign an engine sound profile for the selected flight mode. Use ``Propulsion`` 
 For supplied keyboard bindings and example aircraft, see :doc:`Demo </Demo>`. For custom input, see :doc:`Input </Input>`.
 
 For detailed flight, rotorcraft and landing-gear behavior, see :doc:`Aircraft scripting </Scripting/Aircraft>`.
+
+.. _evs-aircraft--configure-propellers-and-rotor-response:
+
+Configure propellers and rotor response
+---------------------------------------
+
+``Propulsion`` provides shared spool state and visible propeller entries. Assign each rotor/shaft Transform, **Local Axis** and signed fixed **Degrees Per Second**, or select **Use Engine Rpm** with **Rpm Ratio**. A negative fixed speed/ratio reverses that visual rotation; it does not reverse the aircraft's thrust by itself.
+
+Keep mesh import corrections beneath a clean shaft pivot. Configure main and tail rotors independently; assigning the whole airframe as a propeller Transform rotates the wrong hierarchy. Inspect at low speed before choosing high visual rates that can alias between frames.
+
+**Spin Up Seconds** and **Spin Down Seconds** affect the shared spool. Helicopter powered support uses spool state, so its start/stop test must include the time to gain/lose rotor support. Demand-gated shaft options are a separate presentation policy; not every propeller should stop when a control axis is neutral.
+
+Use :doc:`Audio </Audio>` for profile sound selection and :ref:`Particles <evs-particles--propulsion-jets>` for outlet emission. A loop/prefab replacement should not be used to tune thrust, and extra visual rotors do not automatically add extra independently simulated lift points.
+
+.. _evs-aircraft--a-repeatable-flight-tuning-sequence:
+
+A repeatable flight tuning sequence
+-----------------------------------
+
++-------------------------+------------------------------------------------------------------------------------+
+| Stage                   | Check before continuing                                                            |
++=========================+====================================================================================+
+| Static setup            | Scale, mass/centre of mass, colliders, input channels and profile/module ownership |
++-------------------------+------------------------------------------------------------------------------------+
+| Runway or initial hover | Loaded support, brakes/ground handling or powered rotor spool                      |
++-------------------------+------------------------------------------------------------------------------------+
+| Acceleration            | Available thrust/power versus drag; cockpit animation is secondary                 |
++-------------------------+------------------------------------------------------------------------------------+
+| Low-speed control       | Lift/authority onset, pitch/roll/yaw signs and stall/assistance behavior           |
++-------------------------+------------------------------------------------------------------------------------+
+| Cruise                  | Speed/attitude settling and neutral-input response                                 |
++-------------------------+------------------------------------------------------------------------------------+
+| Maneuver                | Requested body rates, available aerodynamic authority and energy loss              |
++-------------------------+------------------------------------------------------------------------------------+
+| Engine-off              | Glide/descent or rotor spin-down, not a full powered hold                          |
++-------------------------+------------------------------------------------------------------------------------+
+| Landing/reset           | Contact blend, gear endpoint, clearances and transient-state reset                 |
++-------------------------+------------------------------------------------------------------------------------+
+
+Change one group at a time. Airplane's assisted attitude response differs from the body-rate policy in Aerobatic Airplane/Jet, so do not copy every response gain across profiles expecting identical control feel.
+
+Jet's parasite/wing/side pressure drag and induced drag affect energy loss, particularly under load. Its Maximum G, stall angle and path response constrain the assisted response; they are not structural damage or pilot-blackout rules. Those gameplay consequences require an application policy.
+
+Use :ref:`telemetry <evs-scripting-events--diagnostic-snapshot>` for pose, world/local velocity, angular velocity, attitude and G readings. GForce is specific-force magnitude: roughly 1 G when supported at rest and 0 G in free fall. Airspeed uses the package's still-air velocity model; it is not a separate wind-provider measurement. A world altitude readout and height above ground are different quantities.
+
+.. _evs-aircraft--diagnose-aircraft-behavior:
+
+Diagnose aircraft behavior
+--------------------------
+
++--------------------------------------------+------------------------------------------------------------------------------------+
+| Symptom                                    | Inspect                                                                            |
++============================================+====================================================================================+
+| Engine runs but helicopter will not lift   | Powered/spooled Propulsion, gravity compensation and configured vertical authority |
++--------------------------------------------+------------------------------------------------------------------------------------+
+| Hover height is not a captured altitude    | Surface Height is clearance support; Hover does not use helicopter hold            |
++--------------------------------------------+------------------------------------------------------------------------------------+
+| Runway steering values revert              | Aircraft profile owns its configured ground-module fields                          |
++--------------------------------------------+------------------------------------------------------------------------------------+
+| Gear refuses to retract                    | Ground/clearance interlock and hinged-suspension readiness                         |
++--------------------------------------------+------------------------------------------------------------------------------------+
+| Gear mesh deployed but no wheel support    | Actual gear endpoint, wheel availability and source Wheel Setup                    |
++--------------------------------------------+------------------------------------------------------------------------------------+
+| Aircraft turns but control surfaces do not | Exterior presentation references/FollowVehicle state                               |
++--------------------------------------------+------------------------------------------------------------------------------------+
+| Aircraft has effects but no thrust         | Movement profile/input/power ownership rather than audio/particles                 |
++--------------------------------------------+------------------------------------------------------------------------------------+
+| G limiter does not cause damage            | Flight-response limit is separate from application damage rules                    |
++--------------------------------------------+------------------------------------------------------------------------------------+
+
+For vehicles that change between road, hover and flight, configure :doc:`registered mode transitions </CombinedVehicles>`. For water contact, use a dedicated :doc:`Boat </Boat>`/:doc:`Submarine </Submarine>` strategy and :doc:`provider </Water>`, rather than treating a rendered ocean as an automatic amphibious mode.

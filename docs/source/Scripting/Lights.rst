@@ -7,6 +7,13 @@ Vehicle lighting separates requested state from actual channel output. A driver 
 
 Use this state layer for gameplay and UI rather than manipulating individual Unity lights directly. A custom renderer or lamp model can then present the same vehicle lighting behavior without becoming a second owner of the beam or indicator state.
 
+.. _evs-scripting-lights--configure-in-the-inspector-first:
+
+Configure in the Inspector first
+--------------------------------
+
+Use :ref:`Add one headlight pair <evs-lights--inspector-quick-start-add-one-headlight-pair>` to add Lights, create Unity Light objects and assign channel Lights/Lenses. Apply/save and test the Live lighting actions before using the API below. Custom application policies build on that working output setup.
+
 .. _evs-scripting-lights--implementation-map:
 
 Implementation map
@@ -15,11 +22,11 @@ Implementation map
 +--------------------+-------------------------------------------------------------+
 | Class              | Responsibility                                              |
 +====================+=============================================================+
-| ``Lights``         | Owns beam/indicator requests, automatic outputs and timing. |
+| ``IndicatorAudio`` | Observes the indicator phase and presents clicks.           |
 +--------------------+-------------------------------------------------------------+
 | ``LightChannel``   | Describes the physical light/emission output for a channel. |
 +--------------------+-------------------------------------------------------------+
-| ``IndicatorAudio`` | Observes the indicator phase and presents clicks.           |
+| ``Lights``         | Owns beam/indicator requests, automatic outputs and timing. |
 +--------------------+-------------------------------------------------------------+
 
 .. _evs-scripting-lights--requested-versus-output-state:
@@ -63,7 +70,7 @@ The sample sends one state request when the application changes night mode. It l
 
 Attach this beside game lighting controls and assign vehicle ``Lights``. It uses one public action per change rather than writing Unity Light intensities directly.
 
-**Example: ``VehicleNightLights.cs``**
+**Example:** ``VehicleNightLights.cs``
 
 .. raw:: html
 
@@ -88,6 +95,17 @@ Attach this beside game lighting controls and assign vehicle ``Lights``. It uses
 
 Read ``BeamMode`` and actual channel output properties for UI. For Inspector setup see :doc:`Lights </Lights>`.
 
+.. _evs-scripting-lights--custom-lighting-groups:
+
+Custom lighting groups
+----------------------
+
+``customLights`` contains ``CustomLightGroup`` entries with the same light/emission parameters as ``LightChannel``, plus an ID, independent on request and optional blink clock. IDs are nonblank and ordinal case-sensitive; ambiguous authored duplicates cannot be addressed. One entry can drive one source or an entire group.
+
+Use ``RegisterCustomLight``, ``UnregisterCustomLight``, ``GetCustomLight``, ``SetCustomLight``, ``ToggleCustomLight``, ``SetCustomLightEnabled``, ``SetAllCustomLights`` and ``RefreshCustomLights``. Registration rejects duplicate IDs. Removal extinguishes the group. Disabled modules/groups remain dark while retaining their on requests. Custom groups do not follow the built-in beam, brake or indicator requests. They advance from ``Lights.Step``; do not run a second custom blink loop.
+
+Inherited ``LitChanged`` reports actual illumination, including blinking and availability. An on request differs from ``IsLit`` while a blink phase or gate is off. ``RefreshCustomLights`` applies field changes without advancing time; the regular step also applies them and cleans removed list entries. Use separate physical Light components/renderers for independently controlled channels so they do not overwrite one another's output.
+
 .. _evs-scripting-lights--complete-public-method-and-event-index:
 
 Complete public method and event index
@@ -95,12 +113,19 @@ Complete public method and event index
 
 The lists below cover public methods and events for this topic and their package base contracts. Signatures include overloads. See :doc:`the detailed vehicle lighting API </API/Lights>` for arguments, return semantics, state and configuration. An override replaces the matching inherited implementation; it is not an additional call to make.
 
-.. _evs-scripting-lights--imodule:
+.. _evs-scripting-lights--customlightgroup:
 
-IModule
-~~~~~~~
+CustomLightGroup
+~~~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`CustomLightGroup <evs-api-lights--customlightgroup>` gives the full declared contract.
+
+.. _evs-scripting-lights--ivehiclemodule:
+
+IVehicleModule
+~~~~~~~~~~~~~~
+
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -143,7 +168,7 @@ Lights
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
 | ``public override void Step(VehicleController vehicle, Command command, float dt)`` | Consumes light/indicator commands, advances the shared blink clock and applies resolved lamp/emission output. |
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| ``public virtual LightChannel GetChannel(LightType type)``                          | Returns the configured lighting channel for the selected light role.                                          |
+| ``public virtual LightChannel GetChannel(VehicleLightType type)``                   | Returns the configured lighting channel for the selected light role.                                          |
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
 | ``public virtual void RestoreAutomaticLights()``                                    | Clears forced lighting overrides so automatic mechanic-following resumes.                                     |
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
@@ -171,7 +196,7 @@ Lights
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
 | ``public virtual void SetReverseOverride(bool? on)``                                | Forces reverse lamp output on/off; ``null`` resumes mechanic-following.                                       |
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetChannelEnabled(LightType type, bool available)``           | Changes availability of a selected lighting channel independently of its requested state.                     |
+| ``public virtual void SetChannelEnabled(VehicleLightType type, bool available)``    | Changes availability of a selected lighting channel independently of its requested state.                     |
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
 
 +------------------------------------------------------------------+----------------------------------------------------------------------------------------------+
@@ -184,12 +209,32 @@ Lights
 | ``public event System.Action<IndicatorState> IndicatorsChanged`` | When requested direction/hazard state changes. Payload: ``IndicatorState``, not blink phase. |
 +------------------------------------------------------------------+----------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-lights--module:
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| Declaration                                                              | Behavior                                                                                                                                   |
++==========================================================================+============================================================================================================================================+
+| ``public virtual CustomLightGroup GetCustomLight(string id)``            | Finds a custom group by its exact ID. Returns null for blank, missing or ambiguous duplicate IDs.                                          |
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool RegisterCustomLight(CustomLightGroup group)``      | Adds a nonnull group with a unique, nonblank ID, then applies its current request. Returns false for invalid or duplicate registrations.   |
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool UnregisterCustomLight(string id)``                 | Turns the identified group off and removes it. Returns false for an unresolved ID.                                                         |
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SetCustomLight(string id, bool on)``               | Sets the identified group's on request and refreshes outputs. Returns false for an unresolved ID. A disabled module or group remains dark. |
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool ToggleCustomLight(string id)``                     | Toggles the identified group's requested on state; returns false for an unresolved ID.                                                     |
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SetCustomLightEnabled(string id, bool available)`` | Changes group availability while retaining its on request. Returns false for an unresolved ID.                                             |
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetAllCustomLights(bool on)``                      | Sets the requested on state of every custom group without changing built-in lighting channels.                                             |
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void RefreshCustomLights()``                            | Applies custom requests and changed configuration immediately without advancing blink clocks. Removed list entries are extinguished.       |
++--------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
 
-Module
-~~~~~~
+.. _evs-scripting-lights--vehiclemodule:
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |

@@ -3,9 +3,16 @@
 Audio ownership and extension
 =============================
 
-Vehicle audio is organized as a core plus replaceable channels. The core owns common routing and spatial policy; a channel reads vehicle state or events and manages its particular voices. ``Engine``, tire, indicator and switch audio can therefore be configured or replaced independently.
+Vehicle audio is organized as a core plus replaceable channels. The core dispatches channels and supplies default VehicleAudioSettings for custom channels; each built-in sound uses its own VehicleAudioSettings for playback and emitter routing. A channel reads vehicle state or events and manages its particular voices. Engine, tire, indicator and switch audio can therefore be configured or replaced independently.
 
 An audio channel is a presentation consumer. It should use mechanical RPM, contact or accepted actions as inputs, rather than changing the engine or replaying input requests to infer what happened. This makes the same mechanic usable with a different sound implementation.
+
+.. _evs-scripting-audio--configure-in-the-inspector-first:
+
+Configure in the Inspector first
+--------------------------------
+
+Start with :ref:`one engine loop <evs-audio--inspector-quick-start-one-working-engine-loop>` or :ref:`collision/landing sound mappings <evs-audio--inspector-quick-start-collision-and-landing-sounds>`. Add the Audio core and channel, assign clips/profiles and emitter anchors, then test the mechanic in Play Mode. Ordinary sound authoring does not require the extension classes below.
 
 .. _evs-scripting-audio--implementation-map:
 
@@ -19,15 +26,15 @@ Implementation map
 +------------------------+--------------------------------------------------------------------------+
 | ``AudioModule``        | Base channel with source creation, loop update and cleanup helpers.      |
 +------------------------+--------------------------------------------------------------------------+
+| ``DamageAudio``        | Separate Effects module for damage sound presentation.                   |
++------------------------+--------------------------------------------------------------------------+
 | ``EngineAudio``        | Selects and modulates the engine loop and ignition transitions.          |
 +------------------------+--------------------------------------------------------------------------+
 | ``EngineSoundProfile`` | Stores engine sound behavior and asset configuration.                    |
 +------------------------+--------------------------------------------------------------------------+
-| ``TireAudio``          | Consumes per-wheel contact/effect-surface state.                         |
-+------------------------+--------------------------------------------------------------------------+
 | ``IndicatorAudio``     | Follows actual indicator output phase.                                   |
 +------------------------+--------------------------------------------------------------------------+
-| ``DamageAudio``        | Separate Effects module for damage sound presentation.                   |
+| ``TireAudio``          | Consumes per-wheel contact/effect-surface state.                         |
 +------------------------+--------------------------------------------------------------------------+
 
 .. _evs-scripting-audio--core-and-channels:
@@ -39,28 +46,74 @@ Use ``AudioModule`` for a channel that belongs to the audio core's lifecycle. It
 
 Use an event subscription when the signal is a discrete transition such as a settled switch click. Use a continuously read state for a loop such as engine RPM. In either case, release subscriptions and owned sources when the channel stops participating; an invisible or disabled vehicle should not leave orphaned voices behind.
 
-``Audio`` owns routing/spatial configuration and advances its local ``AudioModule`` channels once per render frame. A channel creates sources through its core and owns cleanup. Core/channel disable suspends playback. ``DamageAudio`` is a separate Effects module; not every sound-producing component is an ``AudioModule`` channel.
+``Audio`` supplies default settings for custom sources and advances its local ``AudioModule`` channels once per render frame. Each built-in sound stores its playback configuration in Audio Settings. A channel creates sources through its core and owns cleanup. Core/channel disable suspends playback. ``DamageAudio`` is a separate Effects module; not every sound-producing component is an ``AudioModule`` channel.
 
-.. _evs-scripting-audio--engine-sound-selection:
+.. _evs-scripting-audio--independent-engine-sounds:
 
-Engine sound selection
-----------------------
+Independent engine sounds
+-------------------------
 
-``EngineAudio`` combines a sound choice with a response model. The selected clip/profile determines the character of the sound; engine running state, RPM and activity determine how it plays. This permits an engine recording to change without altering torque, shifting or fuel consumption.
+``EngineAudio.items`` contains independent ``EngineAudioItem`` configurations. Each item has a unique ID, active switch, profile or override clip, source anchor, engine/spool references, pitch/load response, ignition settings. Several items may play simultaneously, including several references to the same shared profile. Runtime voices and filter state belong to the channel, not the profile asset.
 
-``EngineSoundProfile.EvaluatePitch`` and ``EvaluateActivity`` provide reusable evaluation for the configured sound behavior. A custom channel can use those calculations or replace modulation while still obtaining mechanical state from the engine. Keep pitch and volume changes in the audio domain; they should not write back into the RPM used by the drivetrain.
+Use ``TryGetItem``/``GetItem`` to edit one item. Changes are read on the next render; ``SetItemActive(id, false)`` stops that item's voices immediately. ``SetItemAnchor`` moves generated sources using the item origin without restarting playback; independently configured cue anchors take precedence. ``AddItem`` rejects null items, empty IDs and duplicates. ``RemoveItem`` unsubscribes and destroys only that item's generated sources. Direct list edits are synchronized automatically during rendering; ``RefreshItems`` can apply structural edits immediately. IDs are case-sensitive; missing or ambiguous IDs return failure/null rather than selecting an arbitrary item.
 
-``TireAudio`` instead consumes wheel feedback and surface profiles. ``IndicatorAudio`` listens to output phase, and ``SwitchAudio`` listens to settled switches. These channels intentionally use different evidence. A custom all-in-one audio system should preserve those distinctions rather than interpreting every sound from throttle/brake input alone.
+An item's ``loopOverride`` takes precedence over its profile loop. Without a profile, that same override provides an independent recording using the item's fallback volume and pitch settings. ``reactToPitch = false`` holds ``audioSettings.pitch``; RPM, motion and spool cannot change it. ``reactToEngineActivity = false`` removes activity-dependent gain/tone changes, while propulsion spool can still scale volume. Turn off ``followPropulsionSpool`` to follow engine running state and ordinary start delay instead.
 
-Separate asset selection from modulation. First resolve which loop should play from override/profile/fallback policy. Then determine its pitch and activity from the selected sound behavior and mechanical state. This allows one engine implementation to support different recordings without encoding asset names into the drivetrain.
+Assigned profile start/stop clips and volumes take priority over the item's local ignition fallback. ``overrideIgnitionClips`` explicitly selects the local pair instead. Item activation, mode changes and restoring presentation do not invent ignition events. ``engineLoopStartDelay`` applies to real running-state transitions for ordinary loops; supported propulsion loops follow spin-up/down.
 
-A startup one-shot represents a running-state transition, not simply “this component has enabled.” This distinction prevents pooled or already-running vehicles from replaying ignition when their presentation is restored. Assign transition clips explicitly and check both fresh ignition and re-enabling an already-running engine.
+``SelectItem(id)`` selects one item exclusively; ``SetItemActive(id, active)`` changes one independently so multiple rotors/layers may remain enabled. Missing or duplicate IDs do not change selection. Engine Audio does not read ProfileSwitcher. The Porsche demo helper listens to its profile-change event and calls SelectItem with the current slot ID (``drive`` or ``hover``).
 
-``EngineAudio`` resolves ``soundOverride`` first, otherwise the current profile sound when ``useProfileSound`` is enabled, otherwise its ``engineLoop`` fallback. ``profileLoopOverride`` replaces a profile loop. RPM profiles can opt into engine-response tuning; Constant fixes pitch, Motion uses speed-based activity.
+Use ``GetLoopSource``/``GetIgnitionSource`` for a generated source and ``TryGetState`` for per-ID pitch, volume, playing state, selected recording, delay and ignition history. Channel-wide properties provide summaries: loop volume is summed, playing means any loop, pitch averages playing loops, and tone cutoff reports the lowest enabled filter. An absent/not-yet-created source returns null.
 
-Ignition one-shots require assigned clips and an explicit running-state transition. Empty clips are silent at runtime. The editor's authoring defaults may populate clip references; runtime does not search for them. Loop-start delay applies to transitions; already-running scene engines do not synthesize a start.
+**Example:** ``RotorAudioControl.cs``
 
-``Propulsion`` spool gates/scales supported rotor/aircraft presentation separately from mechanical ignition. Sound pitch/volume does not set torque or RPM.
+.. raw:: html
+
+   <!-- example: RotorAudioControl.cs -->
+
+.. code-block:: csharp
+
+   using UnityEngine;
+   using EasyVehicleSystem;
+
+   namespace VehicleDocumentationExamples
+   {
+       public sealed class RotorAudioControl : MonoBehaviour
+       {
+           [SerializeField] private EngineAudio engineAudio;
+
+           public void SetRotorEnabled(bool enabled)
+           {
+               if (engineAudio) engineAudio.SetItemActive("rotor-1", enabled);
+           }
+
+           public void SetRotorGain(float gain)
+           {
+               if (engineAudio && engineAudio.TryGetItem("rotor-1", out var item))
+                   item.profileAudioSettings.volume = Mathf.Max(0, gain);
+           }
+
+           public bool AddAuxiliaryLoop(AudioClip clip, Transform anchor)
+           {
+               return engineAudio && engineAudio.AddItem(new EngineAudioItem {
+                   id = "auxiliary", loopOverride = clip, audioSettings = new EasyVehicleSystem.VehicleAudioSettings { audioAnchor = anchor, pitch = 1 },
+                   reactToPitch = false,
+                   reactToEngineActivity = false, playIgnitionSounds = false
+               });
+           }
+       }
+   }
+
+.. _evs-scripting-audio--listening-context:
+
+Listening context
+-----------------
+
+Keep reusable configuration on ``Audio.context.profiles``; see :ref:`profile authoring <evs-audio--camera-area-and-medium-profiles>`. Built-in loops and one-shots, including child-part receivers, share this layer. An empty profile list changes no recordings. Profiles filter by channel identity without editing channel settings or shared sound assets.
+
+An external camera controller calls ``audio.SetListeningCamera(camera, module)`` when its listening view changes. The optional module identifies Interior/Orbit/custom vehicle views; omit it for an external view. ``UseAutomaticListeningCamera()`` restores vehicle-camera detection. ``SetAudioMedium("vacuum")`` selects a case-sensitive custom medium; null/empty restores water-provider detection. ``ListeningCamera``, ``ListeningView`` and ``AudioMedium`` expose the resolved context. After direct settings edits, ``RefreshAudioContext()`` updates matching conditions; playback/rendering also refreshes them automatically.
+
+Custom ``AudioModule`` implementations use the inherited ``UpdateLoop``, ``PlayOneShot`` and ``PlayClip`` helpers. Apply ordinary ``VehicleAudioSettings`` and dynamic source gain/pitch before a one-shot; the helper selects replacements and applies context. For an external source, ``Audio.RegisterAudioSource(channel, source)`` associates channel scope, and ``ApplyAudioContext(channel, source)`` applies current modifiers. Source playback and destruction still belong to its owner. The context restores source/filter baselines before channel writes, so repeated updates do not compound gain or override engine-load filtering.
 
 .. _evs-scripting-audio--add-a-custom-loop-channel:
 
@@ -73,7 +126,7 @@ The voice is channel-owned; the clip is an assigned asset. Deriving from ``Audio
 
 Attach this beside ``Audio``, assign a loop clip, and refresh the core's audio modules. It creates one owned source and lets the core apply routing. Base lifecycle cleanup remains intact.
 
-**Example: ``AuxiliaryAudioLoop.cs``**
+**Example:** ``AuxiliaryAudioLoop.cs``
 
 .. raw:: html
 
@@ -96,12 +149,30 @@ Attach this beside ``Audio``, assign a loop clip, and refresh the core's audio m
            {
                if (!voice) voice = CreateSource(core, "Auxiliary loop", true);
                UpdateLoop(core, voice, loop, loop ? volume : 0, 1,
-                   1 - Mathf.Exp(-core.response * dt));
+                   1 - Mathf.Exp(-core.audioSettings.response * dt));
            }
        }
    }
 
 Do not destroy externally assigned clips/mixers. See :doc:`event subscriptions </Scripting/Events>` for custom event-driven audio and :doc:`presentation </Scripting/Presentation>` for generated visual resources.
+
+.. _evs-scripting-audio--damage-impact-playback:
+
+Damage impact playback
+----------------------
+
+DamageAudio.ResolveProfile(hit) selects an eligible response using its optional override list, the linked Damage configuration and fallback. ResolveProfile(part) only matches materials. TryPlay(hit) performs threshold, cooldown and voice-budget checks and returns whether a sound started. Played reports the hit, selected profile and selected AudioClip after a successful start. Audio pitch and cooldown state belong to each DamageAudio instance, never the shared ScriptableObject.
+
+WarmUp rebuilds voices and cached profile state after structural configuration changes. ClearSounds stops voices and resets cooldowns. Disabling the channel clears playback; enabling it again reuses its prepared sources. For the physical metadata contract and custom pooled effects, see :ref:`Damage scripting <evs-scripting-damage--custom-impact-effect>`.
+
+.. _evs-scripting-audio--horn:
+
+Horn
+----
+
+Add ``HornAudio`` beside the vehicle's Audio core. It follows the held ``Command.Horn`` flag independently of ignition, uses a spatial looping source and fades out on release. Channel mute, master audio suspension, disabling and vehicle deactivation stop the sound. Override Clip or leave Use Default Clip enabled for the bundled recording. The editor assigns the default recording as a serialized reference; runtime-created channels need an explicit Clip. The recording is in ``Resources/Audio/Clips``.
+
+The road demo vehicles use **C** (hold) through KeyboardDriveInput.Horn Key, or **gamepad east face button (B/Circle)** through ActionInput. ActionInput.Horn can reference a custom action or PlayerInput action named Horn. AI/UI integrations can hold it with ``InputBuffer.SetHorn(true)`` and release with false. This is a continuous request, so release and loss of keyboard focus clear it. Keyboard/gamepad merged input preserves it.
 
 .. _evs-scripting-audio--complete-public-method-and-event-index:
 
@@ -117,96 +188,135 @@ Audio
 
 :ref:`Audio <evs-api-audio--audio>` gives the full declared contract.
 
-+----------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| Method                                                                                                         | Role                                                                                                          |
-+================================================================================================================+===============================================================================================================+
-| ``public override void Configure(VehicleController owner)``                                                    | Stores the owner, ensures standard channels, refreshes channel order and resolves missing channel references. |
-+----------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| ``public virtual void RefreshAudioModules()``                                                                  | Rebuilds the audio core's channel snapshot in effective execution order.                                      |
-+----------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| ``public virtual void EnsureModules(System.Func<System.Type, AudioModule> addChannel = null)``                 | Ensures the audio core has its required standard channel components.                                          |
-+----------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| ``public virtual float FilterCornerSqueal(float skid, bool corner, float deltaTime)``                          | Filters or evaluates corner squeal using the tire-audio policy without changing tire physics.                 |
-+----------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| ``public virtual void PlayEvent(EffectEvent effect)``                                                          | Plays the configured presentation sound for a vehicle effect event.                                           |
-+----------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| ``public virtual AudioSource CreateSource(string name, bool loop)``                                            | Creates an audio source with the audio core's routing/spatial policy.                                         |
-+----------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
-| ``public virtual void UpdateLoop(AudioSource source, AudioClip clip, float volume, float pitch, float blend)`` | Updates an existing voice's clip, gain and pitch with the supplied response factor.                           |
-+----------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
+-  ``public override void Configure(VehicleController owner)`` — Binds the component to its configured owner and selected source.
+
+-  ``public virtual AudioSource CreateSource(string name, bool loop)`` — Current create source.
+
+-  ``public virtual void EnsureModules(System.Func<System.Type, AudioModule> addChannel = null)`` — Current ensure modules.
+
+-  ``public virtual float FilterCornerSqueal(float skid, bool corner, float deltaTime)`` — // Smooths cornering squeal separately from short slip spikes so tire audio does not chatter.
+
+-  ``public virtual void PlayEvent(EffectEvent effect)`` — Current play event.
+
+-  ``public virtual void RefreshAudioModules()`` — Current refresh audio modules.
+
+-  ``public virtual void UpdateLoop(AudioSource source, AudioClip clip, float volume, float pitch, float blend, VehicleAudioSettings settings = null)`` — Current update loop.
+
+-  ``public void SetListeningCamera(Camera camera, CameraModule module = null)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public void UseAutomaticListeningCamera()`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public void SetAudioMedium(string medium)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public void RefreshAudioContext()`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public void RegisterAudioSource(AudioModule channel, AudioSource source)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public void UnregisterAudioChannel(AudioModule channel)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public AudioClip GetOriginalLoopClip(AudioSource source)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public AudioClip ResolveLoopClip(AudioModule channel, AudioSource source, AudioClip original)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public void ApplyAudioContext(AudioModule channel, AudioSource source)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public AudioClip PlayOneShot(AudioModule channel, AudioSource source, AudioClip original, float volume = 1)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
+
+-  ``public AudioClip PlayClip(AudioModule channel, AudioSource source, AudioClip original)`` — See :ref:`listening context <evs-scripting-audio--listening-context>` for selection and playback rules.
 
 .. _evs-scripting-audio--audiomodule:
 
 AudioModule
 ~~~~~~~~~~~
 
-:ref:`AudioModule <evs-api-audio--audiomodule>` gives the full declared contract.
+-  **AudioModule** — ``public abstract void RenderAudio(Audio core, float deltaTime)`` — Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it.
+-  **AudioModule** — ``public virtual void SuspendAudio()`` — Suspends the channel's playback and active subscriptions/resources as implemented by that channel.
 
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                            | Role                                                                                                 |
-+===================================================================+======================================================================================================+
-| ``public abstract void RenderAudio(Audio core, float deltaTime)`` | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public virtual void SuspendAudio()``                            | Suspends the channel's playback and active subscriptions/resources as implemented by that channel.   |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-audio--audiosettingsoverride:
+
+AudioSettingsOverride
+~~~~~~~~~~~~~~~~~~~~~
+
+:ref:`AudioSettingsOverride <evs-api-audio--audiosettingsoverride>` gives the full declared contract.
 
 .. _evs-scripting-audio--boatwateraudio:
 
 BoatWaterAudio
 ~~~~~~~~~~~~~~
 
-:ref:`BoatWaterAudio <evs-api-audio--boatwateraudio>` gives the full declared contract.
-
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                            | Role                                                                                                 |
-+===================================================================+======================================================================================================+
-| ``public override void RenderAudio(Audio core, float deltaTime)`` | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public override void SuspendAudio()``                           | Suspends the channel's playback and active subscriptions/resources as implemented by that channel.   |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+-  **BoatWaterAudio** — ``public override void RenderAudio(Audio core, float deltaTime)`` — Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it.
+-  **BoatWaterAudio** — ``public override void SuspendAudio()`` — Suspends the channel's playback and active subscriptions/resources as implemented by that channel.
 
 .. _evs-scripting-audio--brakeaudio:
 
 BrakeAudio
 ~~~~~~~~~~
 
-:ref:`BrakeAudio <evs-api-audio--brakeaudio>` gives the full declared contract.
+-  **BrakeAudio** — ``public override void RenderAudio(Audio core, float deltaTime)`` — Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it.
 
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                            | Role                                                                                                 |
-+===================================================================+======================================================================================================+
-| ``public override void RenderAudio(Audio core, float deltaTime)`` | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-audio--commercialaudio:
+
+CommercialAudio
+~~~~~~~~~~~~~~~
+
+:ref:`CommercialAudio <evs-api-audio--commercialaudio>` gives the full declared contract.
+
+-  ``public override void RenderAudio(Audio core, float deltaTime)`` — Updates brake responses and the reversing alarm through the owning Audio core.
+-  ``public override void SuspendAudio()`` — Stops commercial sounds and resets playback state.
+
+.. _evs-scripting-audio--damageaudio:
+
+DamageAudio
+~~~~~~~~~~~
+
+:ref:`DamageAudio <evs-api-audio--damageaudio>` gives the full declared contract.
+
+-  ``public event Action<Impact, AudioClip> CollisionPlayed`` — Current collision played.
+-  ``public event Action<LandingEvent, AudioClip> LandingPlayed`` — Current landing played.
+-  ``public event Action<DamageHit, DamageImpactProfile, AudioClip> Played`` — Current played.
+-  ``public virtual void ClearSounds()`` — Current clear sounds.
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public override void RenderAudio(Audio core, float deltaTime)`` — Current render audio.
+-  ``public virtual DamageImpactProfile ResolveProfile(DamageHit hit)`` — Current resolve profile.
+-  ``public virtual DamageImpactProfile ResolveProfile(DamagePart part)`` — Current resolve profile.
+-  ``public override void SuspendAudio()`` — Current suspend audio.
+-  ``public virtual bool TryPlay(DamageHit hit)`` — Current try play.
+-  ``public virtual void WarmUp()`` — Current warm up.
+
+.. _evs-scripting-audio--damageaudiocontactsound:
+
+DamageAudio.ContactSound
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+:ref:`DamageAudio.ContactSound <evs-api-audio--damageaudiocontactsound>` gives the full declared contract.
 
 .. _evs-scripting-audio--engineaudio:
 
 EngineAudio
 ~~~~~~~~~~~
 
-:ref:`EngineAudio <evs-api-audio--engineaudio>` gives the full declared contract.
-
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                            | Role                                                                                                 |
-+===================================================================+======================================================================================================+
-| ``public override void RenderAudio(Audio core, float deltaTime)`` | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public override void SuspendAudio()``                           | Suspends the channel's playback and active subscriptions/resources as implemented by that channel.   |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+-  **EngineAudio** — ``public virtual bool AddItem(EngineAudioItem item)`` — Adds a non-null item with a unique non-empty ID and prepares its engine subscription. Returns false for invalid or duplicate IDs/references.
+-  **EngineAudio** — ``public virtual AudioSource GetIgnitionSource(string id)`` — Returns the generated start/stop source for the unique ID, or null before the first audible ignition transition.
+-  **EngineAudio** — ``public virtual EngineAudioItem GetItem(string id)`` — Returns the unique item matching ID, or null for a missing or ambiguous ID. Edits take effect on the next audio render.
+-  **EngineAudio** — ``public virtual AudioSource GetLoopSource(string id)`` — Returns the generated loop source for the unique ID, or null if unresolved/not created. Playback settings are reapplied by the audio renderer.
+-  **EngineAudio** — ``public virtual void RefreshItems()`` — Synchronizes directly edited/replaced lists with runtime voices and engine subscriptions. RenderAudio also synchronizes automatically; removed voices are released.
+-  **EngineAudio** — ``public virtual bool RemoveItem(string id)`` — Removes the unique ID, unsubscribes its engine and releases only its generated sources. Returns false if ID is missing or ambiguous.
+-  **EngineAudio** — ``public override void RenderAudio(Audio core, float deltaTime)`` — Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it.
+-  **EngineAudio** — ``public virtual bool SelectItem(string id)`` — Exclusively activates the unique matching item and immediately stops all other items. Missing or ambiguous IDs return false without changing selection.
+-  **EngineAudio** — ``public virtual bool SetItemActive(string id, bool active)`` — Sets one item active/inactive by ID. Inactive immediately stops its loop and ignition. Reactivation does not synthesize ignition. Returns whether ID resolved.
+-  **EngineAudio** — ``public virtual bool SetItemAnchor(string id, Transform anchor)`` — Changes one item's origin and reparents existing sources without restart. Null restores Audio core origin. Returns whether ID resolved.
+-  **EngineAudio** — ``public virtual bool SetItemProfile(string id, EngineSoundProfile profile)`` — Replaces one item's reusable preset. Null selects override-only settings. Other items and shared assets are unchanged. Returns whether ID resolved.
+-  **EngineAudio** — ``public override void SuspendAudio()`` — Suspends the channel's playback and active subscriptions/resources as implemented by that channel.
+-  **EngineAudio** — ``public virtual bool TryGetItem(string id, out EngineAudioItem item)`` — Returns true and the unique matching mutable item. Empty, missing or duplicate IDs return false with a null item.
+-  **EngineAudio** — ``public virtual bool TryGetState(string id, out EngineAudioItemState state)`` — Returns a snapshot of playing state, volume, pitch, selected loop, delay and ignition history for the ID. False means unresolved or not prepared.
 
 .. _evs-scripting-audio--enginesoundprofile:
 
 EngineSoundProfile
 ~~~~~~~~~~~~~~~~~~
 
-:ref:`EngineSoundProfile <evs-api-audio--enginesoundprofile>` gives the full declared contract.
-
-+-------------------------------------------------------------------------------------+----------------------------------------------------------------------------------+
-| Method                                                                              | Role                                                                             |
-+=====================================================================================+==================================================================================+
-| ``public virtual float EvaluateActivity(VehicleController vehicle, Engine engine)`` | Evaluates sound activity from the configured sound profile and mechanical input. |
-+-------------------------------------------------------------------------------------+----------------------------------------------------------------------------------+
-| ``public virtual float EvaluatePitch(float activity)``                              | Evaluates audio pitch from the configured engine sound response.                 |
-+-------------------------------------------------------------------------------------+----------------------------------------------------------------------------------+
+-  **EngineSoundProfile** — ``public virtual float EvaluateActivity(VehicleController vehicle, Engine engine)`` — Evaluates sound activity from the configured sound profile and mechanical input.
+-  **EngineSoundProfile** — ``public virtual float EvaluatePitch(float activity)`` — Evaluates audio pitch from the configured engine sound response.
 
 .. _evs-scripting-audio--eventaudio:
 
@@ -215,122 +325,121 @@ EventAudio
 
 :ref:`EventAudio <evs-api-audio--eventaudio>` gives the full declared contract.
 
-+--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                             | Role                                                                                                 |
-+====================================================================+======================================================================================================+
-| ``public override void RenderAudio(Audio owner, float deltaTime)`` | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public override void SuspendAudio()``                            | Suspends the channel's playback and active subscriptions/resources as implemented by that channel.   |
-+--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public virtual void PlayEvent(EffectEvent effect)``              | Plays the configured presentation sound for a vehicle effect event.                                  |
-+--------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+-  ``public event System.Action<EffectEvent, AudioClip> Played`` — // Reports the accepted effect event and recording after playback starts.
+-  ``public virtual void PlayEvent(EffectEvent effect)`` — Current play event.
+-  ``public override void RenderAudio(Audio owner, float deltaTime)`` — Current render audio.
+-  ``public override void SuspendAudio()`` — Current suspend audio.
 
-+---------------------------------------------------------------+----------------------------------------------------------------------------------------------+
-| Event / callback                                              | Role                                                                                         |
-+===============================================================+==============================================================================================+
-| ``public event System.Action<EffectEvent, AudioClip> Played`` | When ``EventAudio`` plays a resolved event clip. Payload: ``EffectEvent`` and ``AudioClip``. |
-+---------------------------------------------------------------+----------------------------------------------------------------------------------------------+
+.. _evs-scripting-audio--hornaudio:
+
+HornAudio
+~~~~~~~~~
+
+:ref:`HornAudio <evs-api-audio--hornaudio>` gives the full declared contract.
+
+-  ``public override void RenderAudio(Audio core, float deltaTime)`` — Current render audio.
+-  ``public override void SuspendAudio()`` — Current suspend audio.
 
 .. _evs-scripting-audio--iaudiomodule:
 
 IAudioModule
 ~~~~~~~~~~~~
 
-:ref:`IAudioModule <evs-api-audio--iaudiomodule>` gives the full declared contract.
-
-+---------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                            | Role                                                                                                 |
-+===================================================+======================================================================================================+
-| ``void RenderAudio(Audio core, float deltaTime)`` | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+---------------------------------------------------+------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-audio--imodule:
-
-IModule
-~~~~~~~
-
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
-
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                     | Role                                                                                                                        |
-+============================================================================+=============================================================================================================================+
-| ``void Configure(VehicleController vehicle)``                              | Repeatable setup contract supplied with the owning ``VehicleController``.                                                   |
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-| ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
-+----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
+-  ``void RenderAudio(Audio core, float deltaTime)`` — Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it.
 
 .. _evs-scripting-audio--indicatoraudio:
 
 IndicatorAudio
 ~~~~~~~~~~~~~~
 
-:ref:`IndicatorAudio <evs-api-audio--indicatoraudio>` gives the full declared contract.
+-  **IndicatorAudio** — ``public override void RenderAudio(Audio core, float deltaTime)`` — Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it.
+-  **IndicatorAudio** — ``public virtual void SetClips(AudioClip on, AudioClip off)`` — Replaces indicator tick clips, retaining generated defaults for independently unassigned clips.
+-  **IndicatorAudio** — ``public override void SuspendAudio()`` — Suspends the channel's playback and active subscriptions/resources as implemented by that channel.
 
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                            | Role                                                                                                 |
-+===================================================================+======================================================================================================+
-| ``public override void RenderAudio(Audio core, float deltaTime)`` | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetClips(AudioClip on, AudioClip off)``     | Replaces indicator tick clips, retaining generated defaults for independently unassigned clips.      |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public override void SuspendAudio()``                           | Suspends the channel's playback and active subscriptions/resources as implemented by that channel.   |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-audio--movingpartaudio:
 
-.. _evs-scripting-audio--module:
+MovingPartAudio
+~~~~~~~~~~~~~~~
 
-Module
-~~~~~~
+:ref:`MovingPartAudio <evs-api-audio--movingpartaudio>` gives the full declared contract.
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+-  ``public override void Configure(VehicleController owner)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual AudioSource GetMotionAudioSource(PartMotionEvent phase)`` — Returns the configured or owned audio source for the requested movement phase.
+-  ``public virtual bool PlayMotionAudio(PartMotionEvent phase)`` — Plays the configured audio for the requested movement phase.
+-  ``public override void RenderAudio(Audio core, float deltaTime)`` — Current render audio.
+-  ``public virtual void StopMotionAudio()`` — Stops audio owned by this receiver.
+-  ``public override void SuspendAudio()`` — Current suspend audio.
 
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                    | Role                                                                                                                                   |
-+===========================================================================================+========================================================================================================================================+
-| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-audio--nitroaudio:
 
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                          | Role                                                                                                              |
-+===========================================================================+===================================================================================================================+
-| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+NitroAudio
+~~~~~~~~~~
+
+:ref:`NitroAudio <evs-api-audio--nitroaudio>` gives the full declared contract.
+
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public override void RenderAudio(Audio core, float deltaTime)`` — Current render audio.
+-  ``public override void SuspendAudio()`` — Current suspend audio.
+
+.. _evs-scripting-audio--profiletransitionaudio:
+
+ProfileTransitionAudio
+~~~~~~~~~~~~~~~~~~~~~~
+
+:ref:`ProfileTransitionAudio <evs-api-audio--profiletransitionaudio>` gives the full declared contract.
+
+-  ``public override void Configure(VehicleController owner)`` — Binds the component to its configured owner and selected source.
+-  ``public override void RenderAudio(Audio core, float deltaTime)`` — Current render audio.
+-  ``public override void SuspendAudio()`` — Current suspend audio.
+
+.. _evs-scripting-audio--profiletransitionaudiotransitionsound:
+
+ProfileTransitionAudio.TransitionSound
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:ref:`ProfileTransitionAudio.TransitionSound <evs-api-audio--profiletransitionaudiotransitionsound>` gives the full declared contract.
 
 .. _evs-scripting-audio--switchaudio:
 
 SwitchAudio
 ~~~~~~~~~~~
 
-:ref:`SwitchAudio <evs-api-audio--switchaudio>` gives the full declared contract.
-
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                            | Role                                                                                                 |
-+===================================================================+======================================================================================================+
-| ``public override void RenderAudio(Audio core, float deltaTime)`` | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+-------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+-  **SwitchAudio** — ``public override void RenderAudio(Audio core, float deltaTime)`` — Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it.
 
 .. _evs-scripting-audio--tireaudio:
 
 TireAudio
 ~~~~~~~~~
 
-:ref:`TireAudio <evs-api-audio--tireaudio>` gives the full declared contract.
+-  **TireAudio** — ``public virtual float FilterCornerSqueal(float skid, bool highSpeedCorner, float deltaTime)`` — Filters or evaluates corner squeal using the tire-audio policy without changing tire physics.
+-  **TireAudio** — ``public override void RenderAudio(Audio core, float deltaTime)`` — Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it.
+-  **TireAudio** — ``public override void SuspendAudio()`` — Suspends the channel's playback and active subscriptions/resources as implemented by that channel.
 
-+------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                                                         | Role                                                                                                 |
-+================================================================================================+======================================================================================================+
-| ``public override void RenderAudio(Audio core, float deltaTime)``                              | Advances one channel's audio presentation for elapsed render time; the Audio core normally calls it. |
-+------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public virtual float FilterCornerSqueal(float skid, bool highSpeedCorner, float deltaTime)`` | Filters or evaluates corner squeal using the tire-audio policy without changing tire physics.        |
-+------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public override void SuspendAudio()``                                                        | Suspends the channel's playback and active subscriptions/resources as implemented by that channel.   |
-+------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-audio--vehicleaudiosettings:
+
+VehicleAudioSettings
+~~~~~~~~~~~~~~~~~~~~
+
+-  **VehicleAudioSettings** — ``public void ApplyTo(AudioSource target)`` — Applies mixer and spatial properties to an AudioSource, avoiding unchanged native writes. Does not start playback or replace dynamic gain/pitch.
+-  **VehicleAudioSettings** — ``public float PitchAt(float activity)`` — Maps normalized activity through Pitch Range and clamps to the supported pitch domain.
+-  **VehicleAudioSettings** — ``public float RandomPitch()`` — Returns a clamped random pitch using Pitch and Pitch Range.
+-  **VehicleAudioSettings** — ``public AudioSource ResolveSource(Transform defaultParent, string name, bool loop, out bool created)`` — Returns an assigned source, a source on Audio Anchor, or a generated child source. The created result identifies ownership: destroy only generated sources.
+
+.. _evs-scripting-audio--wiperaudioentry:
+
+WiperAudioEntry
+~~~~~~~~~~~~~~~
+
+:ref:`WiperAudioEntry <evs-api-audio--wiperaudioentry>` gives the full declared contract.
+
+.. _evs-scripting-audio--wipersaudio:
+
+WipersAudio
+~~~~~~~~~~~
+
+:ref:`WipersAudio <evs-api-audio--wipersaudio>` gives the full declared contract.
+
+-  ``public override void Configure(VehicleController owner)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual AudioSource GetAudioSource(string id = null)`` — Current get audio source.
+-  ``public override void RenderAudio(Audio core, float deltaTime)`` — Current render audio.
+-  ``public override void SuspendAudio()`` — Current suspend audio.

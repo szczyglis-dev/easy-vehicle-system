@@ -32,6 +32,79 @@ Uses hull-water contact for surface-water presentation.
 
 **Inherits / implements:** :ref:`EffectsModule <evs-api-presentation--effectsmodule>`.
 
+.. _evs-api-presentation--state-and-configuration:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                                                 | Meaning                                                                                                                                                              |
++========================================================================+======================================================================================================================================================================+
+| ``public float cullDistance``                                          | Distance beyond which this effect suspends rendering, in metres; zero disables distance culling.                                                                     |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentHullRippleRate { get; protected set; }`` | Current resolved hull-ripple emission rate, in particles per second.                                                                                                 |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentPropellerRate { get; protected set; }``  | Current resolved propeller emission rate, in particles per second.                                                                                                   |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentWakeRate { get; protected set; }``       | Current resolved wake emission rate, in particles per second.                                                                                                        |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual int EmittedSplashCount { get; protected set; }``      | Read-only/resolved emitted splash count for ``BoatWaterParticles``.                                                                                                  |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Engine engine``                                               | Assign the engine Engine component/asset used by BoatWaterParticles.                                                                                                 |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Material foamMaterial``                                       | Assign the foam material reference used by BoatWaterParticles. Leave unassigned only when this feature is optional or the component can resolve it automatically.    |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float fullEffectSpeed``                                       | Hull speed in m/s at which speed-driven water effects reach full contribution. Initial value: ``20``.                                                                |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Vector2 hullHalfSize``                                        | Used without a ``WaterInteraction`` component; that component's size takes priority.                                                                                 |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float hullRippleRate``                                        | Base hull-ripple emission rate, in particles per second.                                                                                                             |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool hullRipplesEnabled``                                     | Enables hull ripples behavior for this system. Initial value: ``true``.                                                                                              |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Transform motorOutlet``                                       | Optional authored motor outlet; otherwise use ``sternOffset`` relative to the hull.                                                                                  |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public int propellerBudget``                                         | Maximum count/resolution for propeller budget. Larger values increase detail or work performed by this system. Initial value: ``384``.                               |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool propellerEnabled``                                       | Enables propeller behavior for this system. Initial value: ``true``.                                                                                                 |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem propellerPrefab``                              | Assign the propeller prefab reference used by BoatWaterParticles. Leave unassigned only when this feature is optional or the component can resolve it automatically. |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float propellerRate``                                         | Propeller, wake and splash emission rates at full channel activity, in particles per second.                                                                         |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float runningSprayFactor``                                    | Small bow-side droplets produced by forward motion, in addition to real hull impacts.                                                                                |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public int splashBudget``                                            | Maximum count/resolution for splash budget. Larger values increase detail or work performed by this system. Initial value: ``192``.                                  |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float splashEntryThreshold``                                  | Minimum inward hull-point speed eligible for entry splash particles, in m/s.                                                                                         |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool splashesEnabled``                                        | Enables splashes behavior for this system. Initial value: ``true``.                                                                                                  |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float splashFullEntrySpeed``                                  | Water-entry speed in m/s at which splash intensity reaches full contribution. Initial value: ``.45f``.                                                               |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem splashPrefab``                                 | Assign the splash prefab reference used by BoatWaterParticles. Leave unassigned only when this feature is optional or the component can resolve it automatically.    |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float splashRate``                                            | Propeller, wake and splash emission rates at full channel activity, in particles per second.                                                                         |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Material sprayMaterial``                                      | Assign the spray material reference used by BoatWaterParticles. Leave unassigned only when this feature is optional or the component can resolve it automatically.   |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Vector3 sternOffset``                                         | Fallback propeller-emission point in vehicle-local coordinates, in metres.                                                                                           |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual int SystemCount { get; }``                            | Read-only/resolved system count for ``BoatWaterParticles``.                                                                                                          |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public VehicleController vehicle``                                   | Assign the vehicle VehicleController component/asset used by BoatWaterParticles.                                                                                     |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public int wakeBudget``                                              | Maximum count/resolution for wake budget. Larger values increase detail or work performed by this system. Initial value: ``256``.                                    |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool wakeEnabled``                                            | Enables wake behavior for this system. Initial value: ``true``.                                                                                                      |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem wakePrefab``                                   | Assign the wake prefab reference used by BoatWaterParticles. Leave unassigned only when this feature is optional or the component can resolve it automatically.      |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float wakeRate``                                              | Propeller, wake and splash emission rates at full channel activity, in particles per second.                                                                         |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool waterParticlesEnabled``                                  | Enables water particles behavior for this system. Initial value: ``true``.                                                                                           |
++------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
 .. _evs-api-presentation--methods:
 
 Methods
@@ -47,79 +120,6 @@ Methods
 | ``public virtual void Suspend()``                           | Stops owned water-particle presentation according to the module's cleanup policy. | No arguments; no returned value.                                                           |
 +-------------------------------------------------------------+-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------+
 
-.. _evs-api-presentation--state-and-configuration:
-
-State and configuration
-~~~~~~~~~~~~~~~~~~~~~~~
-
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| Member                                                                 | Meaning                                                                                          |
-+========================================================================+==================================================================================================+
-| ``public VehicleController vehicle``                                   | Authored vehicle used by ``BoatWaterParticles``.                                                 |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Engine engine``                                               | Authored engine used by ``BoatWaterParticles``.                                                  |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public bool waterParticlesEnabled``                                  | Authored water particles enabled used by ``BoatWaterParticles``. Initial value: ``true``.        |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public bool propellerEnabled``                                       | Authored propeller enabled used by ``BoatWaterParticles``. Initial value: ``true``.              |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public bool wakeEnabled``                                            | Authored wake enabled used by ``BoatWaterParticles``. Initial value: ``true``.                   |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public bool splashesEnabled``                                        | Authored splashes enabled used by ``BoatWaterParticles``. Initial value: ``true``.               |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public bool hullRipplesEnabled``                                     | Authored hull ripples enabled used by ``BoatWaterParticles``. Initial value: ``true``.           |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float hullRippleRate``                                        | Base hull-ripple emission rate, in particles per second.                                         |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float runningSprayFactor``                                    | Small bow-side droplets produced by forward motion, in addition to real hull impacts.            |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public ParticleSystem propellerPrefab``                              | Authored propeller prefab used by ``BoatWaterParticles``.                                        |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public ParticleSystem wakePrefab``                                   | Authored wake prefab used by ``BoatWaterParticles``.                                             |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public ParticleSystem splashPrefab``                                 | Authored splash prefab used by ``BoatWaterParticles``.                                           |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Material sprayMaterial``                                      | Authored spray material used by ``BoatWaterParticles``.                                          |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Material foamMaterial``                                       | Authored foam material used by ``BoatWaterParticles``.                                           |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Transform motorOutlet``                                       | Optional authored motor outlet; otherwise use ``sternOffset`` relative to the hull.              |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Vector3 sternOffset``                                         | Fallback propeller-emission point in vehicle-local coordinates, in metres.                       |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Vector2 hullHalfSize``                                        | Used without a ``WaterInteraction`` component; that component's size takes priority.             |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float fullEffectSpeed``                                       | Authored full effect speed used by ``BoatWaterParticles``. Initial value: ``20``.                |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float propellerRate``                                         | Propeller, wake and splash emission rates at full channel activity, in particles per second.     |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float wakeRate``                                              | Propeller, wake and splash emission rates at full channel activity, in particles per second.     |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float splashRate``                                            | Propeller, wake and splash emission rates at full channel activity, in particles per second.     |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float splashEntryThreshold``                                  | Minimum inward hull-point speed eligible for entry splash particles, in m/s.                     |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float splashFullEntrySpeed``                                  | Authored splash full entry speed used by ``BoatWaterParticles``. Initial value: ``.45f``.        |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float cullDistance``                                          | Distance beyond which this effect suspends rendering, in metres; zero disables distance culling. |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public int propellerBudget``                                         | Authored propeller budget used by ``BoatWaterParticles``. Initial value: ``384``.                |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public int wakeBudget``                                              | Authored wake budget used by ``BoatWaterParticles``. Initial value: ``256``.                     |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public int splashBudget``                                            | Authored splash budget used by ``BoatWaterParticles``. Initial value: ``192``.                   |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public virtual float CurrentPropellerRate { get; protected set; }``  | Current resolved propeller emission rate, in particles per second.                               |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public virtual float CurrentWakeRate { get; protected set; }``       | Current resolved wake emission rate, in particles per second.                                    |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public virtual float CurrentHullRippleRate { get; protected set; }`` | Current resolved hull-ripple emission rate, in particles per second.                             |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public virtual int EmittedSplashCount { get; protected set; }``      | Read-only/resolved emitted splash count for ``BoatWaterParticles``.                              |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public virtual int SystemCount { get; }``                            | Read-only/resolved system count for ``BoatWaterParticles``.                                      |
-+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-
 .. _evs-api-presentation--effectscore:
 
 EffectsCore
@@ -130,17 +130,6 @@ EffectsCore
 Configuration/implementation type for effects core within particles and tire marks.
 
 **Inherits / implements:** :ref:`CategoryCore <evs-api-modules--categorycore>`.
-
-.. _evs-api-presentation--methods-1:
-
-Methods
-~~~~~~~
-
-+--------------------------+-------------------------------------------------------------+--------------------------------------------------------------------+
-| Signature                | Role and behavior                                           | Arguments and result                                               |
-+==========================+=============================================================+====================================================================+
-| ``public EffectsCore()`` | Constructs ``EffectsCore`` with the supplied initial state. | **Returns:** New instance initialized from the supplied arguments. |
-+--------------------------+-------------------------------------------------------------+--------------------------------------------------------------------+
 
 .. _evs-api-presentation--state-and-configuration-1:
 
@@ -153,6 +142,17 @@ State and configuration
 | ``public override ModuleCategory Category { get; }`` | Module responsibility category; it does not independently determine execution phase. |
 +------------------------------------------------------+--------------------------------------------------------------------------------------+
 
+.. _evs-api-presentation--methods-1:
+
+Methods
+~~~~~~~
+
++--------------------------+-------------------------------------------------------------+--------------------------------------------------------------------+
+| Signature                | Role and behavior                                           | Arguments and result                                               |
++==========================+=============================================================+====================================================================+
+| ``public EffectsCore()`` | Constructs ``EffectsCore`` with the supplied initial state. | **Returns:** New instance initialized from the supplied arguments. |
++--------------------------+-------------------------------------------------------------+--------------------------------------------------------------------+
+
 .. _evs-api-presentation--effectsmodule:
 
 EffectsModule
@@ -162,7 +162,7 @@ EffectsModule
 
 Configuration/implementation type for effects module within particles and tire marks.
 
-**Inherits / implements:** :ref:`Module <evs-api-modules--module>`, :ref:`IEffectsModule <evs-api-modules--ieffectsmodule>`.
+**Inherits / implements:** :ref:`VehicleModule <evs-api-modules--vehiclemodule>`, :ref:`IEffectsModule <evs-api-modules--ieffectsmodule>`.
 
 .. _evs-api-presentation--state-and-configuration-2:
 
@@ -191,37 +191,45 @@ Controls emission from configured exhaust outlets.
 State and configuration
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| Member                                                           | Meaning                                                                                          |
-+==================================================================+==================================================================================================+
-| ``public VehicleController vehicle``                             | Authored vehicle used by ``ExhaustSmoke``.                                                       |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Engine engine``                                         | Authored engine used by ``ExhaustSmoke``.                                                        |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Transform[] exhaustPoints``                             | Authored exhaust points used by ``ExhaustSmoke``.                                                |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public ParticleSystem[] particles``                            | Authored particles used by ``ExhaustSmoke``.                                                     |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public ParticleSystem particlePrefab``                         | Authored particle prefab used by ``ExhaustSmoke``.                                               |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Material defaultMaterial``                              | Authored default material used by ``ExhaustSmoke``.                                              |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public bool createDefaultParticles``                           | Authored create default particles used by ``ExhaustSmoke``. Initial value: ``true``.             |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float idleRate``                                        | Emission rate at idle activity, in particles per second.                                         |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float loadedRate``                                      | Emission rate at full propulsion load, in particles per second.                                  |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float intensityMultiplier``                             | Authored intensity multiplier used by ``ExhaustSmoke``. Initial value: ``4``.                    |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float response``                                        | Authored response used by ``ExhaustSmoke``. Initial value: ``12``.                               |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public bool animateCustomParticles``                           | Animate speed, size and tint on supplied particle prefabs/systems as well as generated defaults. |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public virtual float CurrentActivity { get; protected set; }`` | Read-only/resolved current activity for ``ExhaustSmoke``.                                        |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public virtual float CurrentRate { get; protected set; }``     | Current resolved emission rate, in particles per second.                                         |
-+------------------------------------------------------------------+--------------------------------------------------------------------------------------------------+
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                                           | Meaning                                                                                                                                                        |
++==================================================================+================================================================================================================================================================+
+| ``public bool animateCustomParticles``                           | Animate speed, size and tint on supplied particle prefabs/systems as well as generated defaults.                                                               |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool createDefaultParticles``                           | Enables create default particles behavior for this system. Initial value: ``true``.                                                                            |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentActivity { get; protected set; }`` | Read-only/resolved current activity for ``ExhaustSmoke``.                                                                                                      |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentRate { get; protected set; }``     | Current resolved emission rate, in particles per second.                                                                                                       |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Material defaultMaterial``                              | Assign the default material reference used by ExhaustSmoke. Leave unassigned only when this feature is optional or the component can resolve it automatically. |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Engine engine``                                         | Assign the engine Engine component/asset used by ExhaustSmoke.                                                                                                 |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Transform[] exhaustPoints``                             | Assign the exhaust points references used by ExhaustSmoke. Entries are processed in list order.                                                                |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float idleRate``                                        | Emission rate at idle activity, in particles per second.                                                                                                       |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float intensityMultiplier``                             | Multiplier/fraction controlling intensity multiplier. Increasing it increases this contribution relative to the unscaled value. Initial value: ``4``.          |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float loadedRate``                                      | Emission rate at full propulsion load, in particles per second.                                                                                                |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float nitroIntensity``                                  | Nitro flame emission multiplier. Default 1; zero stops emission.                                                                                               |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem nitroParticlePrefab``                    | Nitro flame prefab at Exhaust Points. The optional Demo supplies a default; replace or clear to disable.                                                       |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float nitroResponse``                                   | Flame intensity response per second. Default 12; release stops emission immediately.                                                                           |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float nitroRpmInfluence``                               | RPM influence on flame emission, speed and size. Default .75; zero preserves the prefab baseline response.                                                     |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem particlePrefab``                         | Assign the particle prefab reference used by ExhaustSmoke. Leave unassigned only when this feature is optional or the component can resolve it automatically.  |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem[] particles``                            | Assign the particles references used by ExhaustSmoke. Entries are processed in list order.                                                                     |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float response``                                        | Response rate toward the requested state. Higher values generally follow changes faster; consult the component for zero behavior. Initial value: ``12``.       |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public VehicleController vehicle``                             | Assign the vehicle VehicleController component/asset used by ExhaustSmoke.                                                                                     |
++------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-api-presentation--particlefactory:
 
@@ -240,9 +248,9 @@ Methods
 +--------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Signature                                                                                                    | Role and behavior                                                                     | Arguments and result                                                                                                                                                                                                                                                                                                                                                                                              |
 +==============================================================================================================+=======================================================================================+===================================================================================================================================================================================================================================================================================================================================================================================================================+
-| ``public static ParticleSystem CreateSmoke(string name, Transform parent, Material material, bool exhaust)`` | Creates a smoke particle system using the supplied material and owned parent.         | ``name`` — Diagnostic name for the generated source/object. ``parent`` — Owner transform for a newly created presentation resource. ``material`` — Assigned presentation material; ownership is not transferred implicitly. ``exhaust`` — Exhaust, interpreted by this operation in the declared type. **Returns:** Returned ``ParticleSystem``; ownership remains as specified by the creating/lookup operation. |
-+--------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | ``public static ParticleSystem CreateSand(string name, Transform parent, Material material)``                | Creates a granular tire-particle system using the supplied material and owned parent. | ``name`` — Diagnostic name for the generated source/object. ``parent`` — Owner transform for a newly created presentation resource. ``material`` — Assigned presentation material; ownership is not transferred implicitly. **Returns:** Returned ``ParticleSystem``; ownership remains as specified by the creating/lookup operation.                                                                            |
++--------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public static ParticleSystem CreateSmoke(string name, Transform parent, Material material, bool exhaust)`` | Creates a smoke particle system using the supplied material and owned parent.         | ``name`` — Diagnostic name for the generated source/object. ``parent`` — Owner transform for a newly created presentation resource. ``material`` — Assigned presentation material; ownership is not transferred implicitly. ``exhaust`` — Exhaust, interpreted by this operation in the declared type. **Returns:** Returned ``ParticleSystem``; ownership remains as specified by the creating/lookup operation. |
 +--------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | ``public static void SetRate(ParticleSystem system, float rate)``                                            | Sets a particle emission rate on an existing system.                                  | ``system`` — Existing ``ParticleSystem`` to update. ``rate`` — Requested particle emission rate.                                                                                                                                                                                                                                                                                                                  |
 +--------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -258,6 +266,54 @@ Presents propulsion exhaust/jet outlets.
 
 **Inherits / implements:** :ref:`EffectsModule <evs-api-presentation--effectsmodule>`.
 
+.. _evs-api-presentation--events-and-inspector-callbacks:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++--------------------------------------------------+----------------------------------------------------------------------------------------------------+
+| Member                                           | Meaning                                                                                            |
++==================================================+====================================================================================================+
+| ``public event Action<bool> JetsEnabledChanged`` | When jet presentation availability changes. Payload: bool; this does not report mechanical thrust. |
++--------------------------------------------------+----------------------------------------------------------------------------------------------------+
+
+.. _evs-api-presentation--state-and-configuration-4:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                                       | Meaning                                                                                                                                                          |
++==============================================================+==================================================================================================================================================================+
+| ``public Transform[] aircraftPoints``                        | Assign the aircraft points references used by PropulsionJets. Entries are processed in list order. Initial value: ``Array.Empty<Transform>()``.                  |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Color color``                                       | Color and alpha used to render color. Initial value: ``new Color(.25f, .65f, 1, .7f)``.                                                                          |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentRate { get; protected set; }`` | Current resolved emission rate, in particles per second.                                                                                                         |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Material defaultMaterial``                          | Assign the default material reference used by PropulsionJets. Leave unassigned only when this feature is optional or the component can resolve it automatically. |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Engine engine``                                     | Assign the engine Engine component/asset used by PropulsionJets.                                                                                                 |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool followPropulsionSpool``                        | Scale emission by the shared aircraft engine spool. Custom particle prefabs remain untouched.                                                                    |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Transform[] hoverPoints``                           | Assign the hover points references used by PropulsionJets. Entries are processed in list order. Initial value: ``Array.Empty<Transform>()``.                     |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float idleRate``                                    | Emission rate at idle activity, in particles per second.                                                                                                         |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool jetsEnabled``                                  | Enables jets behavior for this system. Initial value: ``true``.                                                                                                  |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float jetSpeed``                                    | Particle launch speed for the generated propulsion jet visuals. Initial value: ``4``.                                                                            |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float loadedRate``                                  | Emission rate at full propulsion load, in particles per second.                                                                                                  |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float nitroRateMultiplier``                         | PropulsionJets emission multiplier at full Nitro output; default 3, minimum 1.                                                                                   |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem particlePrefab``                     | Assign the particle prefab reference used by PropulsionJets. Leave unassigned only when this feature is optional or the component can resolve it automatically.  |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public VehicleController vehicle``                         | Assign the vehicle VehicleController component/asset used by PropulsionJets.                                                                                     |
++--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
 .. _evs-api-presentation--methods-3:
 
 Methods
@@ -269,52 +325,6 @@ Methods
 | ``public virtual void SetJetsEnabled(bool value)`` | Changes propulsion-jet presentation availability without setting mechanical thrust. | ``value`` — Requested bool state for this operation. |
 +----------------------------------------------------+-------------------------------------------------------------------------------------+------------------------------------------------------+
 
-.. _evs-api-presentation--events-and-inspector-callbacks:
-
-Events and Inspector callbacks
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-+--------------------------------------------------+----------------------------------------------------------------------------------------------------+
-| Declaration                                      | Trigger, payload and meaning                                                                       |
-+==================================================+====================================================================================================+
-| ``public event Action<bool> JetsEnabledChanged`` | When jet presentation availability changes. Payload: bool; this does not report mechanical thrust. |
-+--------------------------------------------------+----------------------------------------------------------------------------------------------------+
-
-.. _evs-api-presentation--state-and-configuration-4:
-
-State and configuration
-~~~~~~~~~~~~~~~~~~~~~~~
-
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| Member                                                       | Meaning                                                                                           |
-+==============================================================+===================================================================================================+
-| ``public VehicleController vehicle``                         | Authored vehicle used by ``PropulsionJets``.                                                      |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public Engine engine``                                     | Authored engine used by ``PropulsionJets``.                                                       |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public Transform[] hoverPoints``                           | Authored hover points used by ``PropulsionJets``. Initial value: ``Array.Empty<Transform>()``.    |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public Transform[] aircraftPoints``                        | Authored aircraft points used by ``PropulsionJets``. Initial value: ``Array.Empty<Transform>()``. |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public ParticleSystem particlePrefab``                     | Authored particle prefab used by ``PropulsionJets``.                                              |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public Material defaultMaterial``                          | Authored default material used by ``PropulsionJets``.                                             |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public Color color``                                       | Authored color used by ``PropulsionJets``. Initial value: ``new Color(.25f, .65f, 1, .7f)``.      |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public float idleRate``                                    | Emission rate at idle activity, in particles per second.                                          |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public float loadedRate``                                  | Emission rate at full propulsion load, in particles per second.                                   |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public float jetSpeed``                                    | Authored jet speed used by ``PropulsionJets``. Initial value: ``4``.                              |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public bool jetsEnabled``                                  | Authored jets enabled used by ``PropulsionJets``. Initial value: ``true``.                        |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public bool followPropulsionSpool``                        | Scale emission by the shared aircraft engine spool. Custom particle prefabs remain untouched.     |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-| ``public virtual float CurrentRate { get; protected set; }`` | Current resolved emission rate, in particles per second.                                          |
-+--------------------------------------------------------------+---------------------------------------------------------------------------------------------------+
-
 .. _evs-api-presentation--skidmarkbuffer:
 
 SkidmarkBuffer
@@ -323,23 +333,6 @@ SkidmarkBuffer
 **Runtime/Effects/Decals/SkidmarkBuffer.cs**
 
 Stores bounded world-space ribbon geometry.
-
-.. _evs-api-presentation--methods-4:
-
-Methods
-~~~~~~~
-
-+------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Signature                                                                                                                                | Role and behavior                                                                        | Arguments and result                                                                                                                                                                                                                                                                                                                                                                  |
-+==========================================================================================================================================+==========================================================================================+=======================================================================================================================================================================================================================================================================================================================================================================================+
-| ``public SkidmarkBuffer(int capacity)``                                                                                                  | Constructs ``SkidmarkBuffer`` with the supplied initial state.                           | ``capacity`` — Capacity, interpreted by this operation in the declared type. **Returns:** New instance initialized from the supplied arguments.                                                                                                                                                                                                                                       |
-+------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public void Add(Vector3 from, Vector3 to, Vector3 normal, float width, float intensity, float birthTime)``                             | Appends a mark segment to the bounded geometry buffer and returns its buffer identifier. | ``from`` — Source movement profile/state. ``to`` — Target movement profile/state. ``normal`` — Contact/surface normal in the declared frame. ``width`` — Mark/tire width in metres. ``intensity`` — Intensity, interpreted by this operation in the declared type. ``birthTime`` — Mark creation time.                                                                                |
-+------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public void Add(Vector3 from, Vector3 to, Vector3 normal, float width, float intensity, float birthTime, Color tint, float lifetime)`` | Appends a mark segment to the bounded geometry buffer and returns its buffer identifier. | ``from`` — Source movement profile/state. ``to`` — Target movement profile/state. ``normal`` — Contact/surface normal in the declared frame. ``width`` — Mark/tire width in metres. ``intensity`` — Intensity, interpreted by this operation in the declared type. ``birthTime`` — Mark creation time. ``tint`` — Recorded mark color. ``lifetime`` — Projectile lifetime in seconds. |
-+------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public void Upload()``                                                                                                                 | Uploads changed mark geometry to the owned mesh.                                         | No arguments; no returned value.                                                                                                                                                                                                                                                                                                                                                      |
-+------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-api-presentation--state-and-configuration-5:
 
@@ -354,6 +347,23 @@ State and configuration
 | ``public int SegmentCount { get; private set; }`` | Read-only/resolved segment count for ``SkidmarkBuffer``. |
 +---------------------------------------------------+----------------------------------------------------------+
 
+.. _evs-api-presentation--methods-4:
+
+Methods
+~~~~~~~
+
++------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                                                                                                | Role and behavior                                                                        | Arguments and result                                                                                                                                                                                                                                                                                                                                                                  |
++==========================================================================================================================================+==========================================================================================+=======================================================================================================================================================================================================================================================================================================================================================================================+
+| ``public void Add(Vector3 from, Vector3 to, Vector3 normal, float width, float intensity, float birthTime)``                             | Appends a mark segment to the bounded geometry buffer and returns its buffer identifier. | ``from`` — Source movement profile/state. ``to`` — Target movement profile/state. ``normal`` — Contact/surface normal in the declared frame. ``width`` — Mark/tire width in metres. ``intensity`` — Intensity, interpreted by this operation in the declared type. ``birthTime`` — Mark creation time.                                                                                |
++------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public void Add(Vector3 from, Vector3 to, Vector3 normal, float width, float intensity, float birthTime, Color tint, float lifetime)`` | Appends a mark segment to the bounded geometry buffer and returns its buffer identifier. | ``from`` — Source movement profile/state. ``to`` — Target movement profile/state. ``normal`` — Contact/surface normal in the declared frame. ``width`` — Mark/tire width in metres. ``intensity`` — Intensity, interpreted by this operation in the declared type. ``birthTime`` — Mark creation time. ``tint`` — Recorded mark color. ``lifetime`` — Projectile lifetime in seconds. |
++------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public SkidmarkBuffer(int capacity)``                                                                                                  | Constructs ``SkidmarkBuffer`` with the supplied initial state.                           | ``capacity`` — Capacity, interpreted by this operation in the declared type. **Returns:** New instance initialized from the supplied arguments.                                                                                                                                                                                                                                       |
++------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public void Upload()``                                                                                                                 | Uploads changed mark geometry to the owned mesh.                                         | No arguments; no returned value.                                                                                                                                                                                                                                                                                                                                                      |
++------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
 .. _evs-api-presentation--skidmarks:
 
 Skidmarks
@@ -364,6 +374,46 @@ Skidmarks
 Consumes contact state and controls trail history.
 
 **Inherits / implements:** :ref:`EffectsModule <evs-api-presentation--effectsmodule>`.
+
+.. _evs-api-presentation--events-and-inspector-callbacks-1:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++----------------------------------------+------------------------------------------------+
+| Member                                 | Meaning                                        |
++========================================+================================================+
+| ``public event System.Action Cleared`` | After skidmark history is cleared. No payload. |
++----------------------------------------+------------------------------------------------+
+
+.. _evs-api-presentation--state-and-configuration-6:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                       | Meaning                                                                                                                             |
++==============================================+=====================================================================================================================================+
+| ``public float groundOffset``                | Ground offset in metres in the owning system's space. Initial value: ``.015f``.                                                     |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float lifetime``                    | Time in seconds before the generated object/effect expires. Initial value: ``35``.                                                  |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Material material``                 | Use Szczyglis/``EasyVehicleSystem``/Skidmarks or a compatible transparent vertex-color material.                                    |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float maximumGap``                  | Largest separation that may be joined by one continuous tire trail, in metres.                                                      |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public int maxSegments``                   | Maximum count/resolution for max segments. Larger values increase detail or work performed by this system. Initial value: ``2048``. |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float minimumDistance``             | Minimum distance in metres in the owning system's space. Initial value: ``.12f``.                                                   |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float minimumIntensity``            | Minimum normalized skid/mark activity required to emit a ribbon segment. Initial value: ``.12f``.                                   |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual int SegmentCount { get; }`` | Read-only/resolved segment count for Skidmarks.                                                                                     |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public TireFeedback tireFeedback``         | Assign the feedback TireFeedback component/asset used by Skidmarks.                                                                 |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float width``                       | Base ribbon width in metres for emitted skid marks, before any surface mark-width multiplier. Initial value: ``.24f``.              |
++----------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-api-presentation--methods-5:
 
@@ -376,46 +426,6 @@ Methods
 | ``public virtual void ClearMarks()`` | Clears this vehicle's recorded mark history and breaks existing trails. | No arguments; no returned value. |
 +--------------------------------------+-------------------------------------------------------------------------+----------------------------------+
 
-.. _evs-api-presentation--events-and-inspector-callbacks-1:
-
-Events and Inspector callbacks
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-+----------------------------------------+------------------------------------------------+
-| Declaration                            | Trigger, payload and meaning                   |
-+========================================+================================================+
-| ``public event System.Action Cleared`` | After skidmark history is cleared. No payload. |
-+----------------------------------------+------------------------------------------------+
-
-.. _evs-api-presentation--state-and-configuration-6:
-
-State and configuration
-~~~~~~~~~~~~~~~~~~~~~~~
-
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| Member                                       | Meaning                                                                                          |
-+==============================================+==================================================================================================+
-| ``public Feedback feedback``                 | Authored feedback used by Skidmarks.                                                             |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public Material material``                 | Use Szczyglis/``EasyVehicleSystem``/Skidmarks or a compatible transparent vertex-color material. |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float width``                       | Authored width used by Skidmarks. Initial value: ``.24f``.                                       |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float minimumIntensity``            | Authored minimum intensity used by Skidmarks. Initial value: ``.12f``.                           |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float minimumDistance``             | Authored minimum distance used by Skidmarks. Initial value: ``.12f``.                            |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float maximumGap``                  | Largest separation that may be joined by one continuous tire trail, in metres.                   |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float groundOffset``                | Authored ground offset used by Skidmarks. Initial value: ``.015f``.                              |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public int maxSegments``                   | Authored max segments used by Skidmarks. Initial value: ``2048``.                                |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public float lifetime``                    | Authored lifetime used by Skidmarks. Initial value: ``35``.                                      |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-| ``public virtual int SegmentCount { get; }`` | Read-only/resolved segment count for Skidmarks.                                                  |
-+----------------------------------------------+--------------------------------------------------------------------------------------------------+
-
 .. _evs-api-presentation--tiresmoke:
 
 TireSmoke
@@ -427,6 +437,35 @@ Manages wheel smoke and granular emission.
 
 **Inherits / implements:** :ref:`EffectsModule <evs-api-presentation--effectsmodule>`.
 
+.. _evs-api-presentation--state-and-configuration-7:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                                            | Meaning                                                                                                                                                     |
++===================================================================+=============================================================================================================================================================+
+| ``public bool createDefaultParticles``                            | Enables create default particles behavior for this system. Initial value: ``true``.                                                                         |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float CurrentIntensity { get; protected set; }`` | Read-only/resolved current intensity for ``TireSmoke``.                                                                                                     |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Material defaultMaterial``                               | Assign the default material reference used by TireSmoke. Leave unassigned only when this feature is optional or the component can resolve it automatically. |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float emissionResponse``                                 | Response of smoke density to changing slip. Zero follows slip immediately.                                                                                  |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float maximumRate``                                      | Largest permitted particle emission rate, in particles per second.                                                                                          |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float minimumIntensity``                                 | Minimum normalized tire-effect activity required to emit smoke. Initial value: ``.12f``.                                                                    |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem particlePrefab``                          | Assign the particle prefab reference used by TireSmoke. Leave unassigned only when this feature is optional or the component can resolve it automatically.  |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Material sandMaterial``                                  | Assign the sand material reference used by TireSmoke. Leave unassigned only when this feature is optional or the component can resolve it automatically.    |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public TireFeedback tireFeedback``                              | Assign the feedback TireFeedback component/asset used by TireSmoke.                                                                                         |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ParticleSystem[] wheelParticles``                        | Assign the wheel particles references used by TireSmoke. Entries are processed in list order.                                                               |
++-------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
 .. _evs-api-presentation--methods-6:
 
 Methods
@@ -437,35 +476,6 @@ Methods
 +================================================================+===========================================================================+==================================================================================================================================================================================================+
 | ``public virtual ParticleSystem GetWheelParticles(int index)`` | Returns the smoke/granular particle systems owned for a configured wheel. | ``index`` — Zero-based configured-entry index; use the owner's current list ordering. **Returns:** Returned ``ParticleSystem``; ownership remains as specified by the creating/lookup operation. |
 +----------------------------------------------------------------+---------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-api-presentation--state-and-configuration-7:
-
-State and configuration
-~~~~~~~~~~~~~~~~~~~~~~~
-
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| Member                                                            | Meaning                                                                           |
-+===================================================================+===================================================================================+
-| ``public Feedback feedback``                                      | Authored feedback used by ``TireSmoke``.                                          |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public ParticleSystem[] wheelParticles``                        | Authored wheel particles used by ``TireSmoke``.                                   |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public Material sandMaterial``                                  | Authored sand material used by ``TireSmoke``.                                     |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public ParticleSystem particlePrefab``                          | Authored particle prefab used by ``TireSmoke``.                                   |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public Material defaultMaterial``                               | Authored default material used by ``TireSmoke``.                                  |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public bool createDefaultParticles``                            | Authored create default particles used by ``TireSmoke``. Initial value: ``true``. |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public float maximumRate``                                      | Largest permitted particle emission rate, in particles per second.                |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public float emissionResponse``                                 | Response of smoke density to changing slip. Zero follows slip immediately.        |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public float minimumIntensity``                                 | Authored minimum intensity used by ``TireSmoke``. Initial value: ``.12f``.        |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public virtual float CurrentIntensity { get; protected set; }`` | Read-only/resolved current intensity for ``TireSmoke``.                           |
-+-------------------------------------------------------------------+-----------------------------------------------------------------------------------+
 
 .. _evs-api-presentation--waterparticlefactory:
 

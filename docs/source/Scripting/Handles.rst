@@ -7,38 +7,36 @@ A handle is the passenger-facing description of a control or support target. It 
 
 Keep the contact and the mechanic separate. A throttle handle can move the cockpit lever while an input provider supplies propulsion intent to the engine. Replacing the lever model or hand pose then does not require replacing the engine. For a custom control, first decide whether you need a new target, a new motion mapping or a new gameplay action; these have different extension points.
 
+For custom Animator/Timeline gestures, independent arm/finger weights and common contact/value events, follow :doc:`Custom handle animation and IK </HandleAnimation>`.
+
 .. _evs-scripting-handles--implementation-map:
 
 Implementation map
 ------------------
 
-+------------------------------------------+-----------------------------------------------------------------------+
-| Class                                    | Responsibility                                                        |
-+==========================================+=======================================================================+
-| ``IHandle`` / ``VehicleHandle``          | Common contact, preparation, binding and input contract.              |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``AnchorHandle``                         | Exposes authored hand/foot anchors without control animation.         |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``SteeringWheelHandle`` / ``YokeHandle`` | Describes steering contacts, surface geometry and hand participation. |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``JoystickHandle``                       | Combines authored steering contacts with pitch/roll motion.           |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``MotorcycleHandle``                     | Supplies fixed left/right contacts with prepared finger poses.        |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``ThrottleHandle`` / ``HandleMotion``    | Maps normalized travel to an anchored lever pose.                     |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``PedalHandle``                          | Animates pedal travel and exposes an ankle contact.                   |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``PedalFootHandle``                      | Transfers one stable ankle target between pedals.                     |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``SwitchHandle``                         | Owns requested detents, travel and request/arrival events.            |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``HandleSelector``                       | Chooses between two handles while preserving one seat assignment.     |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``HandTransferHandle``                   | Temporarily moves a hand to another control and restores its binding. |
-+------------------------------------------+-----------------------------------------------------------------------+
-| ``Passengers``                           | Discovers owned handles and supplies input before seat work.          |
-+------------------------------------------+-----------------------------------------------------------------------+
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| Class                                     | Responsibility                                                                          |
++===========================================+=========================================================================================+
+| ``IHandle`` / ``VehicleHandle``           | Common contact, preparation, binding and input contract.                                |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``AnchorHandle``                          | Exposes authored hand/foot anchors without control animation.                           |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``SteeringWheelHandle`` / ``YokeHandle``  | Describes steering contacts, surface geometry and hand participation.                   |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``JoystickHandle``                        | Supplies authored joystick grip contacts; SteeringStickAnimator owns pitch/roll motion. |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``MotorcycleHandle``                      | Supplies fixed left/right contacts with prepared finger poses.                          |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``ThrottleHandle`` / ``ThrottleAnimator`` | Separate throttle palm contact and anchored model motion.                               |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``PedalHandle``                           | Supplies pedal foot/ankle geometry; PedalAnimator owns input and travel.                |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``HandleController`` / ``HandleUse``      | Per-vehicle registry, admission, exclusive limb ownership, travel and return.           |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``SwitchHandle``                          | Supplies switch palm contact; SwitchAnimator owns detents, travel and events.           |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
+| ``Passengers``                            | Updates occupants after the vehicle handle pass.                                        |
++-------------------------------------------+-----------------------------------------------------------------------------------------+
 
 .. _evs-scripting-handles--handle-contract:
 
@@ -49,7 +47,7 @@ The seat asks its configured handle for a target for a specific ``PassengerBodyP
 
 Preparation has two levels. ``Prepare()`` establishes reusable handle geometry. ``BindBodyPart(part, ik, animator)`` prepares that geometry for the current occupant, including adaptive finger binding when enabled. Keep character proportions and calibration on the character; a handle should describe its control surface rather than assume one particular hand size.
 
-During the passenger pass, handles receive ``SetInput(command, deltaTime)`` in ``InputOrder``. This lets a coordinating handle consume state after handles it depends on. The seat then resolves its limb targets. Do not sample another keyboard input or tick the same passenger-driven operation from an independent loop. ``PedalHandle`` and ``PedalFootHandle`` already own render-rate travel through their built-in callbacks; their ``SetInput`` selects demand rather than advancing that travel twice.
+``vehicle.handles`` discovers every handle belonging to that vehicle, including handles outside Passengers. Nested vehicles are excluded. The vehicle calls ``SetInput(command, deltaTime)`` in stable ``InputOrder``, then evaluates automatic requests and advances transfers at the Feedback phase, after resolved braking and before passenger solvers. Value-change events sampled in LateUpdate become eligible on the next physics tick. Do not advance these operations from another loop. Pedal visual animation retains its own render callback.
 
 ``HandDriven(left)`` indicates whether the physical hand should be guided, ``HandSteering(left)`` whether it participates in steering support, and ``HandContact(left)`` supplies contact participation. These are different questions: a travelling hand may remain guided while its locked surface contact is released. The bool ``left`` means left hand when ``true`` and right hand when ``false``.
 
@@ -60,7 +58,7 @@ Connect a custom target
 
 Use a ``VehicleHandle`` subclass when the application already knows where a palm should go. Place the component and its contact beneath the vehicle, assign it to the relevant seat limb, and let your animation or aiming system move the contact. The passenger system continues to own the limb; the application owns only the target pose.
 
-**Example: ``ApplicationPalmHandle.cs``**
+**Example:** ``ApplicationPalmHandle.cs``
 
 .. raw:: html
 
@@ -91,7 +89,53 @@ Runtime handover
 
 A limb configuration selects its mode, handle and optional direct anchor. Changing those choices rebuilds that limb's owned contact at the next applicable passenger pass. Other limbs and torso support remain in place. This is useful for changing a hand from a steering wheel to an auxiliary control without making the passenger exit and enter again.
 
-Handover still needs one owner. An application gesture, steering regrip and a switch interaction must not independently save and restore the same limb fields. Use ``HandTransferHandle`` for an out-and-back gesture, ``HandleSelector`` for persistent selection between contacts, or steering reservations for an application task that temporarily takes a steering hand. These helpers retain their own ownership checks and cleanup boundaries.
+Use ``vehicle.handles.TryUse(seat, limb, target, onArrival)`` for a timed out-and-back action. It returns a new ``HandleUse`` token, or null when admission fails. ``TryUse(seat, target)`` uses the preferred limb and, if enabled, other allowed limbs. An ID overload accepts a unique case-sensitive handle ID. ``Get(id)`` returns null for missing or duplicate IDs; ``TryGet`` returns false. Blank IDs remain accessible by component reference. Set IDs before Refresh; do not rename a registered ID without refreshing.
+
+``TryAcquire`` gives an application-driven target persistent ownership until its token is cancelled. ``TryAcquireAnimator`` reserves the same limb and temporarily selects Animator mode. Tokens expose Phase, IsActive, Arrived, Completed and Cancelled; ``Return()`` requests a normal return, while ``Cancel()`` restores ownership immediately. An Animator acquisition completes immediately on Return because its clip owns the return presentation. Persistent acquisitions have no automatic arrival event. Keep the token with delayed application callbacks and check IsActive. Cancellation after commit does not undo the action.
+
+Admission requires an enabled same-vehicle seat and target, a live occupant, a controlled limb with a reachable source target, the target's Allowed limbs, and normally no active token on that limb. This validates target availability, not anatomical reach distance. Free, Animator and damage-released limbs are never borrowed automatically. ``minimumAttachments`` is the number of other held limbs that must remain on the source for this occupant. Wheels and yokes start at one; pedals and one-hand joysticks allow zero. A blocked request returns null; automatic rules retry while their action remains active. Requests are independent per seat/limb, subject to shared Minimum Attachments. By default active ownership is retained. Interrupt Lower Priority allows a strictly higher-priority timed request to interrupt another timed request on that limb, continuing from its current contact and preserving the original home destination. Persistent and Animator ownership remain protected. Allow Unsupported Departure separately bypasses the source attachment minimum. Priorities also choose among simultaneous automatic requests; ties use input/hierarchy order. Explicit application requests retain admission order.
+
+The controller saves the original handle, hold flag and mode. During travel it owns a transient geometry adapter; only that adapter supplies the intermediate target. On arrival it binds the actual destination for its grip configuration, then releases and returns after Return Delay. Coordinates are relative to the vehicle, so chassis translation/rotation does not leave the limb behind. Feet follow the same lifted trajectory and preserve the destination's rotation requirement. Re-activating an automatic action during return reverses travel from the current pose.
+
+When borrowing a steering hand, the controller uses the steering planner reservation API; the remaining attached hand takes leadership when steering. The planner continues to own wheel geometry, finger poses and rim regrip. A second request cannot remove the last required hand. Controls without a minimum may remain unsupported.
+
+Seat exit cancels its tokens before detach. Target disable/destruction, damage release, external mode/binding changes and missing contacts cancel on the next controller step. Vehicle disable, teleport/reset, Refresh and destruction also clean up. Restoration only changes a binding still owned by that token; a newer foreign binding and a deliberate mode change are preserved. ``CancelSeat`` and ``CancelAll`` are explicit cleanup APIs. Refresh cancels work and rebuilds discovery and ID maps; it is a setup boundary, not a per-frame operation.
+
+**Example:** ``GearLeverReach.cs``
+
+.. raw:: html
+
+   <!-- example: GearLeverReach.cs -->
+
+.. code-block:: csharp
+
+   using UnityEngine;
+   using EasyVehicleSystem;
+
+   namespace VehicleDocumentationExamples
+   {
+       public class GearLeverReach : MonoBehaviour
+       {
+           public VehicleController vehicle;
+           public PassengerSeat seat;
+           private HandleUse request;
+           public void GearChanged()
+           {
+               if (request != null && request.IsActive) return;
+               request = vehicle.handles.TryUse(seat, PassengerBodyPart.RightHand, "gear-lever");
+           }
+           private void OnDisable() => request?.Cancel();
+       }
+   }
+
+.. _evs-scripting-handles--finger-pose-transitions:
+
+Finger pose transitions
+-----------------------
+
+``VehicleHandle.fingerBlendDuration`` controls the duration in seconds for changing from the currently displayed finger pose to this handle's pose (default 0.12 s, zero applies immediately). The passenger captures the actual phalanx rotations before releasing/rebinding a grip solver, restores them after synchronous fitting, then applies a SmoothStep quaternion blend to the destination pose. Controller travel preserves the captured finger pose. Returning to the wheel uses the wheel's duration. ``maximumFingerSpeed`` continues to limit pose changes within a bound handle; the handover itself uses Finger Blend Duration.
+
+Interrupted transitions start from the current visible pose. Only mapped finger bones are affected; wrist IK, palm contacts and attached props retain their ownership. The blend uses scaled time, pauses at timeScale zero and advances once by elapsed time even when posing runs repeatedly in a frame. Zero finger weight leaves animation ownership intact. Initial seating and editor preview do not blend.
 
 .. _evs-scripting-handles--grip-dimensions:
 
@@ -122,7 +166,7 @@ A wheel uses ``rimRadius`` for the centerline radius and ``tubeRadius`` for the 
 
 Geometry changes require preparation and occupant rebinding, not just a new numeric value. Apply them at an explicit authoring/spawn boundary when possible. The following component is intended for an unoccupied vehicle: it updates a cylinder dimension and prepares the handle. For an already occupied seat, also perform the appropriate occupant binding refresh through its normal passenger lifecycle.
 
-**Example: ``CylinderGripSetup.cs``**
+**Example:** ``CylinderGripSetup.cs``
 
 .. raw:: html
 
@@ -156,7 +200,7 @@ This example changes the common cylindrical measurement. It does not change ``St
 Pedal state and actions
 -----------------------
 
-``PedalHandle`` moves a pedal between released and pressed angles and exposes ``contactAnchor`` for the occupant's ankle. Parent that contact to the moving pedal so the target follows travel. ``motion`` holds the pivot mapping; ``releasedAngle`` and ``pressedAngle`` describe the model's endpoints in degrees.
+``PedalAnimator`` moves the pedal between released and pressed angles. The separate ``PedalHandle.anchor`` provides the occupant's ankle contact. Parent that contact to the moving pedal so the target follows travel. ``motion`` holds the pivot mapping; ``releasedAngle`` and ``pressedAngle`` describe the model's endpoints in degrees.
 
 With ``useResolvedPedals``, throttle/brake presentation follows ``DriveDemand`` and ``ServiceBrake``. This matters for signed forward/reverse input: a command can request the opposite direction while mechanics are still resolving it as braking. Reading the resolved actuator makes the foot match the vehicle's actual pedal interpretation. Other ``HandleInput`` selections read their mapped command channel.
 
@@ -181,55 +225,22 @@ For a scripted pedal sequence, call ``SetValue`` when its demand changes and ``F
 Moving one foot between pedals
 ------------------------------
 
-``PedalFootHandle`` gives the seat one stable ankle target while choosing an accelerator or brake destination. Assign the two pedal handles, select ``foot``, and keep its ``target`` separate from both moving pedals. The seat binds to this helper; it does not switch directly between pedal transforms every frame.
+Bind the seat foot directly to the accelerator handle as its home. On the brake handle enable Use On Action, assign the occupied Seat, select RightFoot, set Allowed limbs to Right foot and choose ServiceBrake. This reads resolved service braking, including drivetrain direction logic. Threshold and Release Threshold provide hysteresis. Start with Travel Duration 0.18 s, Release Duration 0, Return Delay 0 and Lift Height 0.035 m. The controller requests the brake while service braking is above threshold and returns to the configured accelerator home afterwards.
 
-Automatic selection reads resolved service braking. ``brakeThreshold`` starts brake selection; ``brakeReleaseThreshold`` provides hysteresis when returning to the accelerator. This avoids rapid switching around a tiny fluctuating brake value. The target travels in the helper's local frame, blends toward the moving destination and adds a lift arc using ``liftHeight`` over ``transferDuration``.
+For a clutch or another shared contact, configure an equivalent Command rule. Use ValueChange for levers/switches whose movement should trigger a reach. That trigger observes an action already in progress; to commit a command exactly when the hand arrives, use TryUse with an arrival callback or ControlInteraction, rather than enabling a second automatic rule on the same destination.
 
-Use ``SelectBrake`` or ``SelectPedal`` for a temporary application choice. Manual selection persists until ``FollowInput()``; selecting ``null`` temporarily removes the usable destination. ``SnapToSelected()`` finishes target travel immediately, useful when establishing an initial seated pose. ``SelectionChanged`` means the destination selection changed, not that the foot has arrived. Read ``IsTransferring`` when arrival matters.
-
-**Example: ``PedalFootOverride.cs``**
-
-.. raw:: html
-
-   <!-- example: PedalFootOverride.cs -->
-
-.. code-block:: csharp
-
-   using UnityEngine;
-   using EasyVehicleSystem;
-
-   namespace VehicleDocumentationExamples
-   {
-       public class PedalFootOverride : MonoBehaviour
-       {
-           public PedalFootHandle foot;
-
-           public void HoldBrakePose()
-           {
-               if (foot) foot.SelectBrake(true);
-           }
-
-           public void ResumeDrivingPose()
-           {
-               if (foot) foot.FollowInput();
-           }
-
-           private void OnDisable() => ResumeDrivingPose();
-       }
-   }
-
-This controls the character's pedal choice only. It does not apply a vehicle brake request. Feed braking through the input/mechanic API when the application needs the vehicle itself to stop.
+A rule must name its seat explicitly. This prevents one passenger from consuming another passenger's limbs. An unoccupied or foreign seat cannot be used. The demo car and bus use this configuration without helper components.
 
 .. _evs-scripting-handles--switch-requests-and-settled-presentation:
 
 Switch requests and settled presentation
 ----------------------------------------
 
-``SwitchHandle`` presents two-position off/on controls or three-position negative/neutral/positive controls. ``Position`` is the requested detent; ``Value`` is normalized displayed travel. ``transitionDuration`` controls how long the visible mechanism takes to reach its destination. ``handAnchor`` follows the model and provides a palm target.
+``SwitchAnimator`` presents two-position off/on controls or three-position negative/neutral/positive controls. ``Position`` is the requested detent; ``Value`` is normalized displayed travel. ``transitionDuration`` controls how long the visible mechanism takes to reach its destination. The paired ``SwitchHandle.anchor`` follows the model and provides a palm target.
 
 Use ``SetValue(bool)`` or ``Toggle()`` for binary controls. Enable ``threePosition`` before calling ``SetPosition(SwitchPosition.Negative)``; invalid enum values throw, and a negative binary position is rejected with an exception. For three-position geometry, ``neutralOffset`` is the middle pose between ``motion.minimum`` and ``motion.maximum``, expressed in the selected motion unit.
 
-``PositionChanged`` and ``ValueChanged`` report changed requests. ``PositionReached`` and ``Switched`` report settled motion from ``SetInput``. A change between negative and positive changes the detent but keeps ``IsOn`` ``true``, so a bool-only listener cannot distinguish those states. Use position events when all three detents carry different meaning.
+``PositionChanged`` and ``ValueChanged`` report changed requests. ``PositionReached`` and ``Switched`` report settled motion from ``SwitchAnimator.Tick``. A change between negative and positive changes the detent but keeps ``IsOn`` ``true``, so a bool-only listener cannot distinguish those states. Use position events when all three detents carry different meaning.
 
 ``SetImmediate`` and ``SetPositionImmediate`` synchronize silently. A mechanic-to-control binding should use them when displaying an existing state, so displaying “gear deployed” does not issue another gear request. Use request events for player intent and settled events for physical clicks; ``SwitchAudio`` already follows settled presentation.
 
@@ -240,7 +251,7 @@ Observe all switch detents
 
 When a three-position switch has different meanings at both ends, subscribe to ``PositionChanged`` instead of the bool event. This observer captures the subscribed source and removes the same handler on disable. It exposes the requested detent for application UI; use ``PositionReached`` instead if the consumer needs settled presentation.
 
-**Example: ``SwitchDetentObserver.cs``**
+**Example:** ``SwitchDetentObserver.cs``
 
 .. raw:: html
 
@@ -255,9 +266,9 @@ When a three-position switch has different meanings at both ends, subscribe to `
    {
        public class SwitchDetentObserver : MonoBehaviour
        {
-           public SwitchHandle control;
+           public SwitchAnimator control;
            public SwitchPosition RequestedPosition { get; private set; }
-           private SwitchHandle subscribed;
+           private SwitchAnimator subscribed;
 
            private void OnEnable()
            {
@@ -285,387 +296,352 @@ Editing ``control`` while enabled does not rebind the captured subscription. Use
 Temporary hand transfer
 -----------------------
 
-``HandTransferHandle`` implements a guided trip from the currently controlled hand to a destination handle and back. ``Begin`` validates occupancy, the chosen hand, source control and destination target. An admitted transfer saves the current handle/hold choices and installs its temporary target for that hand.
-
-The sequence releases palm contact for ``releaseDuration``, travels for ``travelDuration``, binds at the destination, invokes the arrival callback and ``Arrived``, waits for ``dwellDuration``, releases the destination contact, then travels back. Motion is interpolated relative to the vehicle so forward travel does not leave the hand behind in world space. ``IsBusy`` remains ``true`` throughout the sequence.
-
-Use the arrival callback for a simple action that should occur when the hand reaches a control. Use :doc:`ControlInteraction </Scripting/Interactions>` when the action also needs reusable commit, completion, timeout and presentation-mode policy. Keep one transfer helper per simultaneous hand.
-
-``Cancel()`` ends only an active transfer. Disable and loss of the original occupant also cancel it. Restoration checks whether the hand is still using this transfer or its destination before restoring the saved binding; it does not blindly overwrite an unrelated replacement owner's choice. Observe ``Completed`` and ``Cancelled`` to end application UI/input locks.
+For an explicit cockpit action, call TryUse and commit in its arrival callback. Configure travel, release and return delay on the destination handle. ControlInteraction combines the same scheduler with IK, masked Animator gestures or a custom driver. See :doc:`timed interactions </ControlInteractions>`.
 
 .. _evs-scripting-handles--extending-or-selecting-a-handle:
 
 Extending or selecting a handle
 -------------------------------
 
-Use ``AnchorHandle`` for authored static contacts. Derive from ``VehicleHandle`` for a new contact/control contract. Derive from ``SteeringWheelHandle`` when steering participation and its surface/hand-state API are useful. ``JoystickHandle`` adds pitch/roll mapping around authored contacts; ``YokeHandle`` retains the steering-wheel contract. ``MotorcycleHandle`` uses prepared fixed finger poses, so prepare and save poses for the intended character variants during authoring.
+Derive ControlAnimator for new control motion or value sources, and ControlHandle for the corresponding IK contact. Set Allowed limbs, return stable transforms, and override ReadInteractionValue when automatic ValueChange requests should follow the control. Keep command meaning in the control/application and limb scheduling in vehicle.handles. Set minimumAttachments for controls that must retain support. Add control components at runtime, then call vehicle.handles.Refresh once.
 
-``HandleMotion`` is the small geometry mapper used by several controls. ``SetValue`` maps 0–1 to its minimum/maximum; ``SetOffset`` applies a degree offset for rotation or local-distance offset for translation. It requires a valid independent ``anchor``, resets the part to that frame and applies the offset. It is not an input provider or a passenger scheduler.
+.. _evs-scripting-handles--hand-pose-authoring-metadata:
 
-``HandleSelector`` is useful when the seat should keep one assigned handle while another system chooses between idle/active contacts. Use its selection action for manual ownership and ``FollowInput`` to resume configured input selection. For each replacement, preserve stable targets and the base binding/cleanup behavior that the seat relies on.
+Hand pose authoring metadata
+----------------------------
+
+Hand/finger closure sliders are editor authoring helpers. See :doc:`Reusable hand positions </HandPositions>` for saving poses and thumb/finger curl axes, and :doc:`animation and IK </HandleAnimation>` for contact and Animator relay order.
+
+.. _evs-scripting-handles--car-handbrake:
+
+Car handbrake
+-------------
+
+The demo car uses an ``AnchorHandle`` with ID ``handbrake``, restricted to the driver's right hand. Its palm contact is parented to the moving parking brake lever. Automatic use samples ``HandleActionSource.Command`` with ``HandleInput.Handbrake``: the hand stays on the lever while the command is held, then returns to the steering wheel after a short release delay. Outbound travel is 0.16 seconds, return travel 0.28 seconds; finger blending is 0.1 seconds. Priority 10, Interrupt Lower Priority and Allow Unsupported Departure let this request interrupt a lower-priority timed right-hand action and borrow the right hand even while the left hand is using another control. Other limbs keep their own requests; persistent and Animator ownership remain protected.
+
+.. _evs-scripting-handles--synchronizing-control-motion-with-limb-arrival:
+
+Synchronizing control motion with limb arrival
+----------------------------------------------
+
+SwitchAnimator, PedalAnimator, RotaryAnimator, ThrottleAnimator, GearPaddleAnimator, GearLeverAnimator and AnchoredControlAnimator expose **Wait For Handle** (on by default) and **Fake Sync Handle Motion** (off by default). Every control animator references its separate IK contact through Handle. IK handles never animate the control model. The handle's use settings select the occupant and preferred limb and provide the outbound/return times. SteeringWheelAnimator and its steering variants are excluded.
+
+Wait For Handle starts visual motion after the central controller reports Holding and the real limb has reached its contact. An occupied but busy limb normally waits until available; explicit priority-interruption rules can admit a higher-priority timed request. There is no timeout bypass. A missing/disabled handle or absent occupant permits immediate motion. Initial synchronization and editor preview stay silent and do not request a limb. The actual brake, gearbox, lights and other mechanical commands still react immediately; only cockpit presentation waits.
+
+Fake Sync Handle Motion captures the initial contact pose relative to the vehicle before motion starts. Outbound travel targets that captured pose even if the control moves; after arrival the limb follows the live contact. It is independent of Wait For Handle: turning wait off and fake sync on allows immediate control motion with an approach to its original pose. Both can be enabled. Finger blending and return travel retain their existing settings.
+
+The demo enables waiting and disables fake sync on the Car handbrake, profile switch, indicator/wiper stalks, gear paddles, aircraft landing gear switch and Bus gear lever. The handbrake's contact is linked to its animator. Controls without an explicit occupant keep working normally. A helper owns one request for the operation, holds it through visual motion, and releases it afterwards; a continuously held handbrake retains the hand until release. Disable cancels pending synchronization and restores limb ownership.
+
+All controls using Wait For Handle verify actual limb arrival after timed IK transit: the physical palm contact (or foot/ankle bone) must be within 2.5 cm of the target. Hands also wait for the configured finger-blend interval. The check is latched for the operation, so a moving control does not repeatedly pause for a following limb. Existing home attachments are checked too. HumanoidIK supplies the limb bones; humanoid Animator bones are supported when HumanoidIK is absent. Occupied custom rigs must supply those bones/contact data; missing contact data does not falsely report arrival. Controls without an occupant still animate immediately. For a permanently attached control with no action seat, the occupied seat and limb are inferred from the existing home binding, including a foot temporarily borrowed by another pedal. The demo handbrake lift takes 0.22 seconds and lowering 0.20 seconds.
+
+.. _evs-scripting-handles--smooth-physical-reattachment:
+
+Smooth physical reattachment
+----------------------------
+
+After a transfer returns to its home handle, a physical palm can still have a small residual distance from the IK target. Rebinding captures the native point constraint at the real palm position, then eases that offset to the live contact in vehicle coordinates. The duration follows the destination's finger-blend duration, with a minimum of 0.08 seconds. Wrist drive strength rises with the same blend. This prevents a one-tick positional correction at the end of a switch-to-throttle return while retaining the configured return path and finger blending. Initial seating retains immediate authored attachment; disabling or replacing a limb removes its transient capture state.
+
+.. _evs-scripting-handles--animator-and-ik-handle-ownership:
+
+Animator and IK handle ownership
+--------------------------------
+
+All moving controls use the same separation: an Interior animator owns geometry, input/value sampling, events and travel; a Passengers IK handle owns the limb anchor, allowed limbs, hand/finger pose and reach/return settings. Link the animator's Handle to the contact and the contact's Animator back to the visual controller. Both references are serialized in the demo.
+
++------------------------------------------+----------------------------------+
+| Visual controller                        | IK contact                       |
++==========================================+==================================+
+| RotaryAnimator / AnchoredControlAnimator | RotaryHandle                     |
++------------------------------------------+----------------------------------+
+| PedalAnimator                            | PedalHandle                      |
++------------------------------------------+----------------------------------+
+| SwitchAnimator                           | SwitchHandle                     |
++------------------------------------------+----------------------------------+
+| GearPaddleAnimator                       | GearPaddleHandle                 |
++------------------------------------------+----------------------------------+
+| GearLeverAnimator                        | GearLeverHandle                  |
++------------------------------------------+----------------------------------+
+| ThrottleAnimator                         | ThrottleHandle                   |
++------------------------------------------+----------------------------------+
+| SteeringStickAnimator                    | JoystickHandle                   |
++------------------------------------------+----------------------------------+
+| SteeringWheelAnimator / YokeAnimator     | SteeringWheelHandle / YokeHandle |
++------------------------------------------+----------------------------------+
+
+ControlAnimator derives from VehicleHandleAnimator and centralizes Handle, Wait For Handle, Fake Sync Handle Motion and motion guides. ControlHandle derives from AnchorHandle and reads interaction values from its paired animator. PedalHandle adds ankle geometry; it has no input or model travel fields. Steering handles retain only grip/rim geometry and limb support policy. Add animators under Interior / Animators and contacts under Passengers / IK / Handles. The Tools menu also provides Interior / Control Pairs to create and connect both components with a single undoable action. Controls that do not need occupant interaction may leave Handle empty. InstrumentNeedle derives from RotaryAnimator and does not need an IK contact.
+
+Use ``vehicle.handles.Get(id)`` for limb ownership, then use the assigned ControlHandle.animator (or a direct serialized animator reference) to request visual state. Bind lights, wipers, profiles and switch audio to SwitchAnimator. GearShiftAnimator.Animators accepts IGearShiftAnimator implementations, including GearPaddleAnimator. There are no combined motion-and-IK compatibility components.
 
 .. _evs-scripting-handles--complete-public-method-and-event-index:
 
 Complete public method and event index
 --------------------------------------
 
-The lists below cover public methods and events for this topic and their package base contracts. Signatures include overloads. See :doc:`the detailed limb handles and transfers API </API/Handles>` for arguments, return semantics, state and configuration. An override replaces the matching inherited implementation; it is not an additional call to make.
+The following declarations belong to the current runtime types. See the linked API sections for parameters, return values, state and configuration.
 
 .. _evs-scripting-handles--anchorhandle:
 
 AnchorHandle
 ~~~~~~~~~~~~
 
-:ref:`AnchorHandle <evs-api-handles--anchorhandle>` gives the full declared contract.
+-  **AnchorHandle** — ``public override Transform GetAnchor(PassengerBodyPart part)`` — Returns the assigned anchor directly. The seat is responsible for assigning this handle to the intended body part.
 
-+-----------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
-| Method                                                          | Role                                                                                                               |
-+=================================================================+====================================================================================================================+
-| ``public override Transform GetAnchor(PassengerBodyPart part)`` | Returns the assigned anchor directly. The seat is responsible for assigning this handle to the intended body part. |
-+-----------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-handles--handleanimatorbinding:
 
-.. _evs-scripting-handles--handtransferhandle:
+HandleAnimatorBinding
+~~~~~~~~~~~~~~~~~~~~~
 
-HandTransferHandle
-~~~~~~~~~~~~~~~~~~
+:ref:`HandleAnimatorBinding <evs-api-handles--handleanimatorbinding>` gives the full declared contract.
 
-:ref:`HandTransferHandle <evs-api-handles--handtransferhandle>` gives the full declared contract.
+-  ``public void Apply()`` — Current apply.
+-  ``public void BeginControlChange()`` — Current begin control change.
+-  ``public void ContactEnter()`` — Current contact enter.
+-  ``public void ContactExit()`` — Current contact exit.
+-  ``public void EndControlChange()`` — Current end control change.
+-  ``public void SetControlValue(float value)`` — Current set control value.
+-  ``public void SetFingerWeight(float value)`` — Current set finger weight.
+-  ``public void SetIKWeight(float value)`` — // Animation Events use one simple argument and can live on the animated character.
 
-+---------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                                                          | Role                                                                                                                                                                                              |
-+=================================================================================================================================+===================================================================================================================================================================================================+
-| ``public virtual bool Begin(PassengerSeat passengerSeat, PassengerBodyPart hand, VehicleHandle next, Action onArrival = null)`` | Starts release → travel → destination bind/callback → dwell → release → return. Rejects busy/disabled helpers, missing occupancy, invalid hand/source/destination or uncontrolled source binding. |
-+---------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override Transform GetAnchor(PassengerBodyPart bodyPart)``                                                             | Returns this transfer's persistent temporary target. ``Begin``/active ownership determines which hand uses it.                                                                                    |
-+---------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override float HandContact(bool left)``                                                                                | Returns contact participation for the selected hand; guidance can remain enabled while surface contact is released.                                                                               |
-+---------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override bool HandSteering(bool left)``                                                                                | Reports whether the selected hand participates in steering support.                                                                                                                               |
-+---------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void SetInput(Command command, float deltaTime)``                                                             | Advances the active release/travel/dwell/return phase. Cancels if occupancy, destination or binding ownership is no longer valid.                                                                 |
-+---------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Cancel()``                                                                                                | Cancels an active transfer, clears its arrival callback and restores the saved handle/hold only while this transfer still owns the binding.                                                       |
-+---------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-handles--handlecontroller:
 
-+-----------------------------------+------------------------------------------------------------------------------------------------------------+
-| Event / callback                  | Role                                                                                                       |
-+===================================+============================================================================================================+
-| ``public event Action Started``   | After temporary hand ownership begins. No payload.                                                         |
-+-----------------------------------+------------------------------------------------------------------------------------------------------------+
-| ``public event Action Arrived``   | After the hand reaches and binds to the temporary destination, following the arrival callback. No payload. |
-+-----------------------------------+------------------------------------------------------------------------------------------------------------+
-| ``public event Action Completed`` | After the out-and-back hand transfer completes and its binding is restored. No payload.                    |
-+-----------------------------------+------------------------------------------------------------------------------------------------------------+
-| ``public event Action Cancelled`` | After an active hand transfer is cancelled and owned bindings are cleaned up. No payload.                  |
-+-----------------------------------+------------------------------------------------------------------------------------------------------------+
+HandleController
+~~~~~~~~~~~~~~~~
 
-.. _evs-scripting-handles--handlemotion:
+-  **HandleController** — ``public event Action<HandleUse> Finished`` — After completion or cancellation has released ownership and restored any owned binding. Payload is the ended token.
+-  **HandleController** — ``public event Action<HandleUse> Started`` — After a token owns its limb. Payload is the new token.
+-  **HandleController** — ``public void CancelAll()`` — Immediately cancel every active token, blocking reentrant acquisition from cancellation callbacks.
+-  **HandleController** — ``public void CancelSeat(PassengerSeat seat)`` — Immediately cancel tokens for one seat. Blocks reentrant acquisition during cleanup.
+-  **HandleController** — ``public VehicleHandle Current(PassengerSeat seat, PassengerBodyPart limb)`` — Returns the requested destination while a token owns the limb; otherwise its configured handle. May be null for direct anchors.
+-  **HandleController** — ``public VehicleHandle Get(string id)`` — Exact ID lookup; null for missing or duplicate IDs. Disabled registered handles remain discoverable.
+-  **HandleController** — ``public HandleUse GetUse(PassengerSeat seat, PassengerBodyPart limb)`` — Returns the active ownership token for this seat and limb, otherwise null.
+-  **HandleController** — ``public void Refresh()`` — Cancel active work and rebuild handle discovery, IDs, subscriptions and priority order. Call after adding/removing handles or editing IDs/priorities.
+-  **HandleController** — ``public HandleUse TryAcquire(PassengerSeat seat, PassengerBodyPart limb, VehicleHandle target)`` — Admit persistent application-driven target ownership; returns null on refusal. Cancel the returned token to restore the home binding.
+-  **HandleController** — ``public HandleUse TryAcquireAnimator(PassengerSeat seat, PassengerBodyPart limb, VehicleHandle target)`` — Admit persistent ownership with Animator mode. Cancel restores mode only if it is still Animator.
+-  **HandleController** — ``public bool TryGet(string id, out VehicleHandle handle)`` — Exact case-sensitive ID lookup. Returns false for missing, blank/unregistered or duplicate IDs.
+-  **HandleController** — ``public HandleUse TryReachAndHold(PassengerSeat seat, PassengerBodyPart limb, VehicleHandle target)`` — Reach using outbound timing, then retain ownership until Return or Cancel. Returns null if unavailable.
+-  **HandleController** — ``public HandleUse TryUse(PassengerSeat seat, PassengerBodyPart limb, string id, Action onArrival = null)`` — Admit an out-and-back reach or return null. Explicit-limb overloads require that limb; the target-only overload uses preferred/fallback settings. Callback runs once on arrival.
+-  **HandleController** — ``public HandleUse TryUse(PassengerSeat seat, PassengerBodyPart limb, VehicleHandle target, Action onArrival = null)`` — Admit an out-and-back reach or return null. Explicit-limb overloads require that limb; the target-only overload uses preferred/fallback settings. Callback runs once on arrival.
+-  **HandleController** — ``public HandleUse TryUse(PassengerSeat seat, VehicleHandle target, Action onArrival = null)`` — Admit an out-and-back reach or return null. Explicit-limb overloads require that limb; the target-only overload uses preferred/fallback settings. Callback runs once on arrival.
 
-HandleMotion
-~~~~~~~~~~~~
+.. _evs-scripting-handles--handlefingerposition:
 
-:ref:`HandleMotion <evs-api-handles--handlemotion>` gives the full declared contract.
+HandleFingerPosition
+~~~~~~~~~~~~~~~~~~~~
 
-+-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                          | Role                                                                                                                                                                 |
-+=================================================+======================================================================================================================================================================+
-| ``public virtual void SetValue(float value)``   | Clamps a fraction to 0–1, maps it between minimum and maximum, then applies ``SetOffset``. Rotation uses degrees; translation uses local distance.                   |
-+-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetOffset(float offset)`` | Resets ``movingPart`` to the independent anchor and applies rotation in degrees or translation in local units. Invalid/nonfinite/self-descendant frames are ignored. |
-+-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+-  **HandleFingerPosition** — ``public HandleFingerPosition Copy()`` — Independent copy of this finger configuration.
+-  **HandleFingerPosition** — ``public Vector3 Rotation(HandleFingerSegment segment)`` — Typed lookup of the base/middle/tip rotation; rejects invalid enum values.
+-  **HandleFingerPosition** — ``public Vector3 Rotation(int segment)`` — Returns base, middle or tip rotation for segment 0, 1 or 2.
+-  **HandleFingerPosition** — ``public void SetRotation(HandleFingerSegment segment, Vector3 rotation)`` — Sets a joint rotation in calibrated bone-local XYZ degrees; rejects invalid enum values.
 
-.. _evs-scripting-handles--handleselector:
+.. _evs-scripting-handles--handlehandpose:
 
-HandleSelector
+HandleHandPose
 ~~~~~~~~~~~~~~
 
-:ref:`HandleSelector <evs-api-handles--handleselector>` gives the full declared contract.
+-  **HandleHandPose** — ``public HandleHandPose Copy()`` — Deep copy including all five finger configurations.
+-  **HandleHandPose** — ``public HandleFingerPosition Finger(HandleFinger finger)`` — Typed finger lookup; invalid enum values throw ArgumentOutOfRangeException.
+-  **HandleHandPose** — ``public HandleFingerPosition Finger(string digit)`` — Returns the configured Thumb, Index, Middle or Ring finger; other names use Little.
+-  **HandleHandPose** — ``public void SetFinger(HandleFinger finger, HandleFingerPosition position)`` — Replaces the chosen finger configuration; rejects null and invalid enum values.
 
-+---------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| Method                                                              | Role                                                                                                 |
-+=====================================================================+======================================================================================================+
-| ``public virtual void SelectActive(bool value)``                    | Selects the active or idle handle and takes manual selection ownership.                              |
-+---------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public virtual void FollowInput()``                               | Releases a manual selection/value override and resumes configured input following.                   |
-+---------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public override void SetInput(Command command, float deltaTime)`` | Chooses active/default handle from its configured Command mapping unless a manual selection owns it. |
-+---------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
-| ``public override Transform GetAnchor(PassengerBodyPart part)``     | Forwards contact lookup to the currently selected eligible handle.                                   |
-+---------------------------------------------------------------------+------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-handles--handlehandposition:
 
-+----------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                               | Role                                                                                                              |
-+================================================================+===================================================================================================================+
-| ``public event System.Action<VehicleHandle> SelectionChanged`` | When the selected destination handle changes. Payload: ``VehicleHandle``, possibly ``null``; this is not arrival. |
-+----------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+HandleHandPosition
+~~~~~~~~~~~~~~~~~~
+
+-  **HandleHandPosition** — ``public HandleHandPosition Copy()`` — Deep resolved-value copy, including the resolved Auto-apply closure policy, with independent left/right/finger objects and no preset link.
+-  **HandleHandPosition** — ``public HandleHandPose Hand(bool leftHand)`` — Returns the resolved local/shared hand data.
+-  **HandleHandPosition** — ``public HandleHandPose Hand(HandleHandSide side)`` — Resolved hand data, using the optional shared preset. Invalid enum values throw ArgumentOutOfRangeException.
+-  **HandleHandPosition** — ``public void SetHand(HandleHandSide side, HandleHandPose pose)`` — Replaces the resolved side in local data or the linked preset; rejects null.
+
+.. _evs-scripting-handles--handlehandpositionpreset:
+
+HandleHandPositionPreset
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+:ref:`HandleHandPositionPreset <evs-api-handles--handlehandpositionpreset>` gives the full declared contract.
+
+.. _evs-scripting-handles--handleuse:
+
+HandleUse
+~~~~~~~~~
+
+-  **HandleUse** — ``public event Action Arrived`` — After binding the destination and running the arrival callback. Persistent acquisitions do not emit this event.
+-  **HandleUse** — ``public event Action Cancelled`` — After cancellation has released ownership. An already committed action is not undone.
+-  **HandleUse** — ``public event Action Completed`` — After the return completes and the home binding is restored.
+-  **HandleUse** — ``public bool BeginAnimation()`` — Give an arrived, held hand to Animator ownership; Return restores its original mode and performs the timed home trip. Returns false if ownership/state is no longer valid.
+-  **HandleUse** — ``public bool BeginAnimation(bool keepHandOnTarget)`` — With true, retain hand IK/physical support while animating fingers; Return/cancellation restores finger ownership. False uses whole-limb animation.
+-  **HandleUse** — ``public void Cancel()`` — Idempotent immediate cancellation. Never restores a newer foreign binding.
+-  **HandleUse** — ``public void Return()`` — Release persistent/automatic holding and request a timed return. For an outbound trip, return follows arrival.
 
 .. _evs-scripting-handles--ihandle:
 
 IHandle
 ~~~~~~~
 
-:ref:`IHandle <evs-api-handles--ihandle>` gives the full declared contract.
+-  **IHandle** — ``void SetInput(Command command, float deltaTime)`` — Updates custom IK contact targets; it never owns instrument geometry.
 
-+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| Method                                                                          | Role                                                                                                                |
-+=================================================================================+=====================================================================================================================+
-| ``void Prepare()``                                                              | Prepares reusable contact geometry or handle initialization without entering a seat.                                |
-+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``Transform GetAnchor(PassengerBodyPart part)``                                 | Returns the stable contact transform for a supported body part, or ``null`` when unavailable/unsupported.           |
-+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``void BindBodyPart(PassengerBodyPart part, HumanoidIK ik, Animator animator)`` | Prepares the selected limb for this handle, including supported adaptive finger binding and palm frames.            |
-+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``void SetInput(Command command, float deltaTime)``                             | Consumes the owner-supplied command/timestep as part of the passenger handle pass.                                  |
-+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``bool HandDriven(bool left)``                                                  | Reports whether the selected hand should receive physical target guidance.                                          |
-+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``bool HandSteering(bool left)``                                                | Reports whether the selected hand participates in steering support.                                                 |
-+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``float HandContact(bool left)``                                                | Returns contact participation for the selected hand; guidance can remain enabled while surface contact is released. |
-+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
+-  ``void BindBodyPart(PassengerBodyPart part, HumanoidIK ik, Animator animator)`` — Prepares the selected limb for this handle, including supported adaptive finger binding and palm frames.
 
-.. _evs-scripting-handles--joystickhandle:
+-  ``Transform GetAnchor(PassengerBodyPart part)`` — Returns the stable contact transform for a supported body part, or ``null`` when unavailable/unsupported.
 
-JoystickHandle
-~~~~~~~~~~~~~~
+-  ``float HandContact(bool left)`` — Returns contact participation for the selected hand; guidance can remain enabled while surface contact is released.
 
-:ref:`JoystickHandle <evs-api-handles--joystickhandle>` gives the full declared contract.
+-  ``bool HandDriven(bool left)`` — Reports whether the selected hand should receive physical target guidance.
 
-+--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                       | Role                                                                                                                               |
-+==============================================================+====================================================================================================================================+
-| ``public virtual void SetControls(float pitch, float roll)`` | Maps pitch -1..1 to ``HandleMotion`` travel and applies roll around ``localRollAxis`` between ``minimumRoll`` and ``maximumRoll``. |
-+--------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+-  ``bool HandSteering(bool left)`` — Reports whether the selected hand participates in steering support.
+
+-  ``void Prepare()`` — Initializes the contact or synchronizes its initial state without requesting a limb.
 
 .. _evs-scripting-handles--motorcyclehandle:
 
 MotorcycleHandle
 ~~~~~~~~~~~~~~~~
 
-:ref:`MotorcycleHandle <evs-api-handles--motorcyclehandle>` gives the full declared contract.
-
-+-------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
-| Method                                                                                          | Role                                                                                                     |
-+=================================================================================================+==========================================================================================================+
-| ``public override void BindBodyPart(PassengerBodyPart part, HumanoidIK ik, Animator animator)`` | Prepares the selected limb for this handle, including supported adaptive finger binding and palm frames. |
-+-------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
-| ``public override Transform GetAnchor(PassengerBodyPart part)``                                 | Returns the prepared left/right grip target for the requested hand.                                      |
-+-------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-handles--pedalfoothandle:
-
-PedalFootHandle
-~~~~~~~~~~~~~~~
-
-:ref:`PedalFootHandle <evs-api-handles--pedalfoothandle>` gives the full declared contract.
-
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                        | Role                                                                                                                                         |
-+===============================================================================================+==============================================================================================================================================+
-| ``public override void Prepare()``                                                            | Prepares reusable contact geometry or handle initialization without entering a seat.                                                         |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Tick(float deltaTime)``                                                 | Advances the declaring presentation/state machine by elapsed seconds; avoid a second call when its built-in owner already ticks it.          |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override Transform GetAnchor(PassengerBodyPart part)``                               | Returns its stable ankle target only for the configured foot with an enabled same-vehicle destination; otherwise returns ``null``.           |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void SetInput(Command command, float deltaTime)``                           | Selects brake/accelerator from resolved service braking with hysteresis while automatic selection owns the foot; it does not advance travel. |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SelectPedal(VehicleHandle pedal)``                                      | Selects a specific pedal handle, including ``null`` to release a usable foot destination.                                                    |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SelectBrake(bool value)``                                               | Selects the brake or accelerator pedal and takes manual foot-selection ownership.                                                            |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void FollowInput()``                                                         | Releases a manual selection/value override and resumes configured input following.                                                           |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetPedals(VehicleHandle acceleratorHandle, VehicleHandle brakeHandle)`` | Replaces the accelerator/brake handle references used by foot selection.                                                                     |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SnapToSelected()``                                                      | Finishes the foot target's current transfer immediately at its selected pedal.                                                               |
-+-----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                        | Role                                                                                                              |
-+=========================================================+===================================================================================================================+
-| ``public event Action<VehicleHandle> SelectionChanged`` | When the selected destination handle changes. Payload: ``VehicleHandle``, possibly ``null``; this is not arrival. |
-+---------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+-  **MotorcycleHandle** — ``public override void BindBodyPart(PassengerBodyPart part, HumanoidIK ik, Animator animator)`` — Prepares the selected limb for this handle, including supported adaptive finger binding and palm frames.
+-  **MotorcycleHandle** — ``public override Transform GetAnchor(PassengerBodyPart part)`` — Returns the assigned anchor directly. The seat is responsible for assigning this handle to the intended body part.
 
 .. _evs-scripting-handles--pedalhandle:
 
 PedalHandle
 ~~~~~~~~~~~
 
-:ref:`PedalHandle <evs-api-handles--pedalhandle>` gives the full declared contract.
-
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                              | Role                                                                                                                                                          |
-+=====================================================================+===============================================================================================================================================================+
-| ``public override void Prepare()``                                  | Prepares reusable contact geometry or handle initialization without entering a seat.                                                                          |
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void ResetMotion()``                               | Clears presentation requests and restores the released/default motion state.                                                                                  |
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Tick(float deltaTime)``                       | Advances the declaring presentation/state machine by elapsed seconds; avoid a second call when its built-in owner already ticks it.                           |
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override Transform GetAnchor(PassengerBodyPart part)``     | Returns ``contactAnchor`` directly; author this as the ankle target beneath the moving pedal.                                                                 |
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void SetInput(Command command, float deltaTime)`` | Updates ``TargetValue`` only while ``FollowsInput``. Reads resolved pedals or the configured Command channel; render-rate ``Tick`` advances displayed travel. |
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetValue(float value)``                       | Takes external demand ownership, sanitizes/clamps value to 0–1 and requests smoothed pedal travel. ``FollowInput`` releases the override.                     |
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetImmediate(float value)``                   | Takes external value ownership, clamps normalized travel and applies it immediately; ``onValueChanged`` reports an actual displayed-value change.             |
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void FollowInput()``                               | Releases a manual selection/value override and resumes configured input following.                                                                            |
-+---------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Event / callback                            | Role                                                                                                                                                            |
-+=============================================+=================================================================================================================================================================+
-| ``public UnityEvent<float> onValueChanged`` | After this control's value changes. Payload: the event's value type; ``PedalHandle`` reports displayed travel, ``SwitchHandle`` reports a changed bool request. |
-+---------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+-  **PedalHandle** — ``public override Transform GetAnchor(PassengerBodyPart part)`` — Returns the assigned anchor directly. The seat is responsible for assigning this handle to the intended body part.
+-  **PedalHandle** — ``public override void Prepare()`` — Initializes the contact or synchronizes its initial state without requesting a limb.
+-  **PedalHandle** — ``public virtual bool TryGetFootPose(out Vector3 position, out Quaternion rotation)`` — Resolves fixed ankle position and foot pitch from Ankle Anchor and Contact Anchor without creating a target.
 
 .. _evs-scripting-handles--steeringwheelhandle:
 
 SteeringWheelHandle
 ~~~~~~~~~~~~~~~~~~~
 
-:ref:`SteeringWheelHandle <evs-api-handles--steeringwheelhandle>` gives the full declared contract.
-
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                                               | Role                                                                                                                                  |
-+======================================================================================================================+=======================================================================================================================================+
-| ``public override void Prepare()``                                                                                   | Prepares reusable contact geometry or handle initialization without entering a seat.                                                  |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void BindBodyPart(PassengerBodyPart part, HumanoidIK ik, Animator animator)``                      | Prepares the selected limb for this handle, including supported adaptive finger binding and palm frames.                              |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual Vector3 Centerline(float angle)``                                                                   | Evaluates the steering-rim centerline at an angular coordinate in the wheel's local frame.                                            |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float RadiusAt(float angle)``                                                                       | Returns the steering-rim tube radius at the supplied angular coordinate.                                                              |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float SignedDistanceLocal(Vector3 point)``                                                          | Evaluates a wheel-local point against the steering tube and returns scaled surface distance.                                          |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetGripMode(SteeringGripMode mode)``                                                           | Chooses both hands, left only, right only or released steering-grip permission.                                                       |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool AllowsHand(bool left)``                                                                        | Checks enabled state and the configured left/right grip-mode permission.                                                              |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override Transform GetAnchor(PassengerBodyPart part)``                                                      | Returns ``leftTarget``/``rightTarget`` only for an allowed corresponding hand; unsupported limbs or disallowed hands return ``null``. |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override bool HandDriven(bool left)``                                                                       | Reports whether the selected hand should receive physical target guidance.                                                            |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override bool HandSteering(bool left)``                                                                     | Reports whether the selected hand participates in steering support.                                                                   |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetHandControl(bool left, bool driven, bool steering)``                                        | Selects physical-guidance and steering-support participation independently for one hand.                                              |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool HandPoseFrozen(bool left)``                                                                    | Reports whether the selected hand retains its captured pose rather than continuously refitting.                                       |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool HandPinch(bool left)``                                                                         | Reports whether the selected hand uses the pinch gesture.                                                                             |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetHandPoseFrozen(bool left, bool value)``                                                     | Chooses captured-pose reuse for the selected hand.                                                                                    |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetHandPinch(bool left, bool value)``                                                          | Enables/disables the selected hand's pinch gesture.                                                                                   |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float HandFingerExtension(bool left)``                                                              | Returns the selected hand's normalized finger-extension gesture.                                                                      |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetHandFingerExtension(bool left, float value)``                                               | Sets normalized finger extension for one steering hand.                                                                               |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float PalmPressure(bool left)``                                                                     | Returns normalized palm-pressure presentation for the selected hand.                                                                  |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetPalmPressure(bool left, float value)``                                                      | Sets normalized palm pressure and updates a bound adaptive hand when applicable.                                                      |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float HandClosure(bool left)``                                                                      | Returns normalized finger-closure state for the selected steering hand.                                                               |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override float HandContact(bool left)``                                                                     | Returns contact participation for the selected hand; guidance can remain enabled while surface contact is released.                   |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool HandPreclosing(bool left)``                                                                    | Reports whether fingers are closing before palm contact settles.                                                                      |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetHandContact(bool left, float closure, float contact, bool preclosing = false)``             | Sets normalized closure/contact and the preclosing flag for one steering hand.                                                        |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float SignedDistance(Vector3 worldPoint)``                                                          | Returns signed world-space distance to the steering tube surface; positive means outside.                                             |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void GetContactFrame(float angle, out Vector3 point, out Quaternion rotation)``                     | Returns a world-space contact point/orientation at an angular coordinate around the steering rim.                                     |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void GetPalmContactFrame(float angle, float pressure, out Vector3 point, out Quaternion rotation)`` | Returns a world palm-contact frame including the requested pressure adjustment.                                                       |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void UpdateTargets()``                                                                              | Updates steering palm targets from current geometry without changing seat occupancy.                                                  |
-+----------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-handles--switchhandle:
-
-SwitchHandle
-~~~~~~~~~~~~
-
-:ref:`SwitchHandle <evs-api-handles--switchhandle>` gives the full declared contract.
-
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                | Role                                                                                                                                                                                                  |
-+=======================================================================+=======================================================================================================================================================================================================+
-| ``public override void Prepare()``                                    | Prepares reusable contact geometry or handle initialization without entering a seat.                                                                                                                  |
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override Transform GetAnchor(PassengerBodyPart part)``       | Returns ``handAnchor`` directly; it does not filter the requested body-part enum.                                                                                                                     |
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetValue(bool value)``                          | Requests Positive for ``true`` and Neutral for ``false``. Changed requests emit position/bool notifications and start travel.                                                                         |
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Toggle()``                                      | Requests the opposite current body/switch/wiper/profile/gear state through the declaring component.                                                                                                   |
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetPosition(SwitchPosition position)``          | Requests a detent. Invalid enum values throw ``ArgumentOutOfRangeException``; Negative in binary mode throws ``InvalidOperationException``. A changed request starts travel and emits request events. |
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetImmediate(bool value)``                      | Silently synchronizes Positive/Neutral, displayed value and motion without request or settlement callbacks.                                                                                           |
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetPositionImmediate(SwitchPosition position)`` | Silently synchronizes a switch detent and displayed pose without issuing control events.                                                                                                              |
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void SetInput(Command command, float deltaTime)``   | Advances detent travel by elapsed seconds, applies motion, then emits Switched and ``PositionReached`` on settlement.                                                                                 |
-+-----------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                        | Role                                                                                                                                                                                                     |
-+=========================================================+==========================================================================================================================================================================================================+
-| ``public event Action<bool> ValueChanged``              | When the requested binary ``IsOn`` state changes. Payload: bool. Moving between negative and positive detents keeps ``IsOn`` ``true`` and does not emit this event. Immediate synchronization is silent. |
-+---------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<bool> Switched``                  | When switch presentation settles. Payload: bool ``IsOn``; negative and positive three-position states both count as on.                                                                                  |
-+---------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<SwitchPosition> PositionChanged`` | When requested switch detent changes. Payload: ``SwitchPosition``; distinguish all three positions with this event.                                                                                      |
-+---------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<SwitchPosition> PositionReached`` | When switch travel settles at its detent. Payload: ``SwitchPosition``.                                                                                                                                   |
-+---------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public UnityEvent<bool> onValueChanged``              | After this control's value changes. Payload: the event's value type; ``PedalHandle`` reports displayed travel, ``SwitchHandle`` reports a changed bool request.                                          |
-+---------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public UnityEvent<SwitchPosition> onPositionChanged`` | After a changed switch detent request. Payload: ``SwitchPosition``; silent immediate synchronization does not invoke it.                                                                                 |
-+---------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-handles--throttlehandle:
-
-ThrottleHandle
-~~~~~~~~~~~~~~
-
-:ref:`ThrottleHandle <evs-api-handles--throttlehandle>` gives the full declared contract.
-
-+-----------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| Method                                                          | Role                                                                                                                |
-+=================================================================+=====================================================================================================================+
-| ``public override Transform GetAnchor(PassengerBodyPart part)`` | Returns ``handAnchor`` directly; it does not filter the requested body-part enum.                                   |
-+-----------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetValue(float value)``                   | Passes normalized lever travel to its ``HandleMotion`` geometry mapper; it does not set mechanical engine throttle. |
-+-----------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
+-  **SteeringWheelHandle** — ``public virtual bool AllowsHand(bool left)`` — Checks enabled state and the configured left/right grip-mode permission.
+-  **SteeringWheelHandle** — ``public override void BindBodyPart(PassengerBodyPart part, HumanoidIK ik, Animator animator)`` — Prepares the selected limb for this handle, including supported adaptive finger binding and palm frames.
+-  **SteeringWheelHandle** — ``public virtual Vector3 Centerline(float angle)`` — Evaluates the steering-rim centerline at an angular coordinate in the wheel's local frame.
+-  **SteeringWheelHandle** — ``public override Transform GetAnchor(PassengerBodyPart part)`` — Returns the assigned anchor directly. The seat is responsible for assigning this handle to the intended body part.
+-  **SteeringWheelHandle** — ``public virtual void GetContactFrame(float angle, out Vector3 point, out Quaternion rotation)`` — Returns a world-space contact point/orientation at an angular coordinate around the steering rim.
+-  **SteeringWheelHandle** — ``public virtual void GetPalmContactFrame(float angle, float pressure, out Vector3 point, out Quaternion rotation)`` — Returns a world palm-contact frame including the requested pressure adjustment.
+-  **SteeringWheelHandle** — ``public override float HandContact(bool left)`` — Returns contact participation for the selected hand; guidance can remain enabled while surface contact is released.
+-  **SteeringWheelHandle** — ``public override bool HandDriven(bool left)`` — Reports whether the selected hand should receive physical target guidance.
+-  **SteeringWheelHandle** — ``public virtual bool HandPinch(bool left)`` — Reports whether the selected hand uses the pinch gesture.
+-  **SteeringWheelHandle** — ``public override bool HandSteering(bool left)`` — Reports whether the selected hand participates in steering support.
+-  **SteeringWheelHandle** — ``public virtual float PalmPressure(bool left)`` — Returns normalized palm-pressure presentation for the selected hand.
+-  **SteeringWheelHandle** — ``public override void Prepare()`` — Initializes the contact or synchronizes its initial state without requesting a limb.
+-  **SteeringWheelHandle** — ``public virtual float RadiusAt(float angle)`` — Returns the steering-rim tube radius at the supplied angular coordinate.
+-  **SteeringWheelHandle** — ``public override void ResolveHandPositions(bool left, out HandleHandPose primary, out HandleHandPose secondary, out float blend)`` — Selects the configured grip/pinch and blends the pressure configuration using current steering contact demand.
+-  **SteeringWheelHandle** — ``public virtual void SetGripMode(SteeringGripMode mode)`` — Chooses both hands, left only, right only or released steering-grip permission.
+-  **SteeringWheelHandle** — ``public virtual void SetHandContact(bool left, float contact)`` — Sets normalized physical contact participation for one hand; finger pose is independent of contact.
+-  **SteeringWheelHandle** — ``public virtual void SetHandControl(bool left, bool driven, bool steering)`` — Selects physical-guidance and steering-support participation independently for one hand.
+-  **SteeringWheelHandle** — ``public virtual void SetHandPinch(bool left, bool value)`` — Enables/disables the selected hand's pinch gesture.
+-  **SteeringWheelHandle** — ``public virtual void SetHandPinch(bool left, float amount)`` — Sets a clamped 0–1 Pinch-to-Wrapped blend. Zero uses normal grip/pressure selection; one uses the saved Pinch pose.
+-  **SteeringWheelHandle** — ``public virtual void SetPalmPressure(bool left, float value)`` — Sets the blend towards the authored pressure hand position; the calibrated palm contact stays unchanged.
+-  **SteeringWheelHandle** — ``public virtual float SignedDistance(Vector3 worldPoint)`` — Returns signed world-space distance to the steering tube surface; positive means outside.
+-  **SteeringWheelHandle** — ``public virtual float SignedDistanceLocal(Vector3 point)`` — Evaluates a wheel-local point against the steering tube and returns scaled surface distance.
+-  **SteeringWheelHandle** — ``public override bool Supports(PassengerBodyPart part)`` — Whether Allowed limbs and any specialized geometry policy permit this limb.
+-  **SteeringWheelHandle** — ``public virtual void UpdateTargets()`` — Updates steering palm targets from current geometry without changing seat occupancy.
 
 .. _evs-scripting-handles--vehiclehandle:
 
 VehicleHandle
 ~~~~~~~~~~~~~
 
-:ref:`VehicleHandle <evs-api-handles--vehiclehandle>` gives the full declared contract.
+-  **VehicleHandle** — ``public virtual void SetInput(Command command, float deltaTime)`` — Updates custom IK contact targets; it never owns instrument geometry.
 
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                         | Role                                                                                                                            |
-+================================================================================================+=================================================================================================================================+
-| ``public virtual void Prepare()``                                                              | Prepares reusable contact geometry or handle initialization without entering a seat.                                            |
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void ResetHandle()``                                                          | Resets local handle state through the common extensible handle contract.                                                        |
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void BindBodyPart(PassengerBodyPart part, HumanoidIK ik, Animator animator)`` | Prepares the selected limb for this handle, including supported adaptive finger binding and palm frames.                        |
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| ``public abstract Transform GetAnchor(PassengerBodyPart part)``                                | Returns the stable contact transform for a supported body part, or ``null`` when unavailable/unsupported.                       |
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetInput(Command command, float deltaTime)``                             | Receives the sampled command/timestep from Passengers. Base implementation is empty; override for input-driven handle behavior. |
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool HandDriven(bool left)``                                                  | Reports whether the selected hand should receive physical target guidance.                                                      |
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool HandSteering(bool left)``                                                | Reports whether the selected hand participates in steering support.                                                             |
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float HandContact(bool left)``                                                | Returns contact participation for the selected hand; guidance can remain enabled while surface contact is released.             |
-+------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
+-  **VehicleHandle** — ``public event Action<HandleContactContext> ContactEnded`` — Once when contact is lost or released (including exit/disable/rebinding). Payload retains the original occupant identity.
+
+-  **VehicleHandle** — ``public event Action<HandleContactContext> ContactStarted`` — Once on a not-touching to touching transition; C# event runs before the matching UnityEvent.
+
+-  **VehicleHandle** — ``public event Action<HandleContactContext> ContactUpdated`` — Once per contact sample while touching, including its start sample. Payload identifies handle, seat, occupant, part and target.
+
+-  **VehicleHandle** — ``public UnityEvent<HandleContactContext> onContactEnded`` — Inspector-configurable counterpart of ContactEnded. Runs after the C# event for the same phase.
+
+-  **VehicleHandle** — ``public UnityEvent<HandleContactContext> onContactStarted`` — Inspector-configurable counterpart of ContactStarted. Runs after the C# event for the same phase.
+
+-  **VehicleHandle** — ``public UnityEvent<HandleContactContext> onContactUpdated`` — Inspector-configurable counterpart of ContactUpdated. Runs after the C# event for the same phase.
+
+-  **VehicleHandle** — ``public UnityEvent<HandleValueContext> onValueChangeStarted`` — Inspector-configurable counterpart of ValueChangeStarted. Runs after the C# event for the same phase.
+
+-  **VehicleHandle** — ``public UnityEvent<HandleValueContext> onValueChangeStopped`` — Inspector-configurable counterpart of ValueChangeStopped. Runs after the C# event for the same phase.
+
+-  **VehicleHandle** — ``public UnityEvent<HandleValueContext> onValueChanging`` — Inspector-configurable counterpart of ValueChanging. Runs after the C# event for the same phase.
+
+-  **VehicleHandle** — ``public event Action<HandleValueContext> ValueChangeStarted`` — Once when a significant value change or explicit BeginValueChange starts activity.
+
+-  **VehicleHandle** — ``public event Action<HandleValueContext> ValueChangeStopped`` — Once when the value settles for valueStopDelay, explicit EndValueChange runs or the handle is disabled/destroyed.
+
+-  **VehicleHandle** — ``public event Action<HandleValueContext> ValueChanging`` — Each active changed/manual sample; does not imply contact or commit a gameplay action.
+
+-  **VehicleHandle** — ``public void BeginValueChange()`` — Starts explicit value activity, emitting Started only when idle. Constant-value samples still emit progress until EndValueChange.
+
+-  **VehicleHandle** — ``public virtual void BindBodyPart(PassengerBodyPart part, HumanoidIK ik, Animator animator)`` — Prepares the selected limb for this handle, including supported adaptive finger binding and palm frames.
+
+-  **VehicleHandle** — ``public void ClearHandPositionOverride(HandleHandSide side)`` — Restores normal selection and wheel pressure/pinch blending for that hand.
+
+-  **VehicleHandle** — ``public void EndValueChange()`` — Ends manual/automatic activity and emits Stopped once if active. Safe when idle.
+
+-  **VehicleHandle** — ``public void EnsureHandPositions()`` — Initializes missing configurations with the defaults for the handle type; existing local or shared poses remain unchanged.
+
+-  **VehicleHandle** — ``public abstract Transform GetAnchor(PassengerBodyPart part)`` — Returns the stable contact transform for a supported body part, or ``null`` when unavailable/unsupported.
+
+-  **VehicleHandle** — ``public HandleFingerPosition GetFingerPosition(int positionIndex, HandleHandSide side, HandleFinger finger)`` — Typed access to one finger of one configured hand.
+
+-  **VehicleHandle** — ``public virtual Transform GetHandAnchor(PassengerBodyPart part)`` — Returns the configured palm target with pose offsets. Feet keep the raw anchor; source geometry remains on GetAnchor.
+
+-  **VehicleHandle** — ``public HandleHandPose GetHandPose(int positionIndex, HandleHandSide side)`` — Resolved local/shared hand data; edits to shared data affect all handles linked to that asset.
+
+-  **VehicleHandle** — ``public HandleHandPosition GetHandPosition(int index)`` — Strict indexed lookup; invalid indices throw ArgumentOutOfRangeException. HandPosition(int) remains the clamped lookup.
+
+-  **VehicleHandle** — ``public HandleHandPosition GetHandPosition(string name)`` — Named lookup; a missing name throws KeyNotFoundException.
+
+-  **VehicleHandle** — ``public int GetHandPositionOverride(HandleHandSide side)`` — Returns the explicit position index, or -1 for automatic selection.
+
+-  **VehicleHandle** — ``public HandlePoseSettings GetPoseSettings(PassengerBodyPart part)`` — Returns the live settings for this body part; lazily restores a null settings object. Invalid enum throws ArgumentOutOfRangeException.
+
+-  **VehicleHandle** — ``public virtual float HandContact(bool left)`` — Returns contact participation for the selected hand; guidance can remain enabled while surface contact is released.
+
+-  **VehicleHandle** — ``public virtual bool HandDriven(bool left)`` — Reports whether the selected hand should receive physical target guidance.
+
+-  **VehicleHandle** — ``public HandleHandPosition HandPosition(int index)`` — Returns a position, clamping the index to the available list.
+
+-  **VehicleHandle** — ``public virtual bool HandSteering(bool left)`` — Reports whether the selected hand participates in steering support.
+
+-  **VehicleHandle** — ``public HandleHandPosition MakeHandPositionLocal(int index)`` — Replaces the entry with a deep local copy of its resolved values, detaching any shared asset.
+
+-  **VehicleHandle** — ``public virtual void Prepare()`` — Initializes the contact or synchronizes its initial state without requesting a limb.
+
+-  **VehicleHandle** — ``public void ReleaseContact(PassengerSeat seat, PassengerBodyPart part)`` — Releases one tracked pair and emits Ended once if touching. Safe when untracked.
+
+-  **VehicleHandle** — ``public bool ReportContact(PassengerSeat seat, PassengerBodyPart part, bool touching)`` — Records touching/not-touching for the current occupant. Select Manual contactSource to use the report; events are emitted when SampleContact runs. No geometric contact required in Manual mode.
+
+-  **VehicleHandle** — ``public virtual void ResetHandle()`` — Resets local handle state through the common extensible handle contract.
+
+-  **VehicleHandle** — ``public virtual void ResolveHandPositions(bool left, out HandleHandPose primary, out HandleHandPose secondary, out float blend)`` — Resolves local or shared left/right configurations and their blend. Base handles use their normal grip; wheels select pinch or blend pressure.
+
+-  **VehicleHandle** — ``public void ResolveHandPositions(HandleHandSide side, out HandleHandPose primary, out HandleHandPose secondary, out float blend)`` — Typed access to the current configuration sources and blend; dispatches to the handle-specific resolver.
+
+-  **VehicleHandle** — ``public void SampleContact(PassengerSeat seat, PassengerBodyPart part)`` — Samples one tracked seat/part and emits contact transitions plus progress while touching. Seats call this after ordinary posing and rigid supports; custom pipelines can call it explicitly.
+
+-  **VehicleHandle** — ``public void SampleInteraction(float deltaTime)`` — Samples the current source and advances generic activity using finite nonnegative seconds. The first sample establishes a silent baseline. Built-in handles call it in LateUpdate.
+
+-  **VehicleHandle** — ``public void SetAnimationValue(float value)`` — Selects the explicit animation signal and stores a finite scalar X/vector. Invalid values are ignored. Sampling emits events; no mechanical action is performed.
+
+-  **VehicleHandle** — ``public void SetAnimationValue(Vector3 value)`` — Selects the explicit animation signal and stores a finite scalar X/vector. Invalid values are ignored. Sampling emits events; no mechanical action is performed.
+
+-  **VehicleHandle** — ``public void SetDefaultHandPosition(int index)`` — Sets the normal grip index with strict index validation.
+
+-  **VehicleHandle** — ``public void SetFingerPosition(int positionIndex, HandleHandSide side, HandleFinger finger, HandleFingerPosition position)`` — Replaces one finger in the resolved hand; rejects null.
+
+-  **VehicleHandle** — ``public void SetHandPose(int positionIndex, HandleHandSide side, HandleHandPose pose)`` — Replaces resolved hand data, including the shared asset when linked; rejects null.
+
+-  **VehicleHandle** — ``public void SetHandPositionOverride(HandleHandSide side, int index)`` — Temporarily forces that hand to use one configured pose with no automatic gesture blend. Does not replace contact geometry, steering ownership or physics. Not serialized.
+
+-  **VehicleHandle** — ``public void SetPoseTarget(PassengerBodyPart part, Transform target)`` — Sets a final world-space target override for this part. Null returns to the handle contact target.
+
+-  **VehicleHandle** — ``public void SetPoseWeights(PassengerBodyPart part, float position, float rotation, float fingers)`` — Sets position, rotation and finger weights independently. Values clamp to 0–1; non-finite values become zero. No re-entry/rebind required.
+
+-  **VehicleHandle** — ``public virtual bool Supports(PassengerBodyPart part)`` — Whether Allowed limbs and any specialized geometry policy permit this limb.
+
+-  **VehicleHandle** — ``public bool TrackContact(PassengerSeat seat, PassengerBodyPart part, Transform contact)`` — Registers a contact transform for the current occupant and limb. Returns false for inactive/transitioning/empty seats or a limb bound to another handle. Built-in humanoids register their mapped bones/palm contacts automatically.
+
+-  **VehicleHandle** — ``public bool TryGetContactState(PassengerSeat seat, PassengerBodyPart part, out HandleContactContext state)`` — Returns the last sampled snapshot for the current occupant, or false/default when unavailable; false-contact snapshots remain valid while tracked.
+
+-  **VehicleHandle** — ``public bool TryGetHandPosition(string name, out HandleHandPosition position)`` — Finds the first exact, case-sensitive position name. Returns false and null for missing/empty names.

@@ -1,26 +1,34 @@
-.. _evs-scripting-movingparts--anchored-moving-parts:
+.. _evs-scripting-movingparts--exterior-motion-and-moving-parts:
 
-Anchored moving parts
-=====================
+Exterior motion and moving parts
+================================
 
 ``MovingPart`` is a reusable motion actuator for a visible vehicle part. It can rotate, slide, follow a target or move under rate input around an authored neutral pose. Gameplay provides requests; the component owns constrained motion and pose application.
 
 Use it for an independently controlled mechanism such as a turret base, sliding platform or adjustable exterior part. Keep the higher-level rule — who may operate it, what it aims at and whether an action is allowed — in the application or a dedicated mechanic.
+
+For windshield wipers, ``Wipers`` owns stroke timing, parking and audio, while ``WiperBlade`` maps the phase to blade geometry. Use their dedicated controls rather than running a second actuator or timer on the same blade.
 
 .. _evs-scripting-movingparts--implementation-map:
 
 Implementation map
 ------------------
 
-+--------------------+--------------------------------------------------------------------------+
-| Class              | Responsibility                                                           |
-+====================+==========================================================================+
-| ``MovingPart``     | Owns rotation/translation requests, constraints and scheduled motion.    |
-+--------------------+--------------------------------------------------------------------------+
-| ``ExteriorModule`` | Base integration with the vehicle module lifecycle.                      |
-+--------------------+--------------------------------------------------------------------------+
-| ``DamagePart``     | Defines released-part ownership that can stop vehicle-controlled motion. |
-+--------------------+--------------------------------------------------------------------------+
++------------------------+--------------------------------------------------------------------------+
+| Class                  | Responsibility                                                           |
++========================+==========================================================================+
+| ``DamagePart``         | Defines released-part ownership that can stop vehicle-controlled motion. |
++------------------------+--------------------------------------------------------------------------+
+| ``ExteriorModule``     | Base integration with the vehicle module lifecycle.                      |
++------------------------+--------------------------------------------------------------------------+
+| ``MovingPart``         | Owns rotation/translation requests, constraints and scheduled motion.    |
++------------------------+--------------------------------------------------------------------------+
+| ``WiperBlade``         | Maps a stroke phase to blade geometry.                                   |
++------------------------+--------------------------------------------------------------------------+
+| ``Wipers``             | Owns blade timing, requests, parking and stroke audio.                   |
++------------------------+--------------------------------------------------------------------------+
+| ``WiperSwitchBinding`` | Synchronizes a cockpit switch with the wiper module.                     |
++------------------------+--------------------------------------------------------------------------+
 
 ``MovingPart`` is an Exterior module configured on an owned child or with an explicit part transform. It captures a neutral pose once; ``CaptureNeutralPose`` deliberately replaces that baseline and clears requests.
 
@@ -52,9 +60,9 @@ The adapter stores both button states so releasing one button does not erase the
 
 The example does not know the slider's axis, distance or speed. Those remain on ``MovingPart``, so the same input adapter can operate a differently authored mechanism without changing its code.
 
-``Configure`` translation geometry in the Inspector, then connect press/release callbacks to this component. Both buttons held result in zero. No keyboard convention is built into the moving part.
+Configure translation geometry in the Inspector, then connect press/release callbacks to this component. Both buttons held result in zero. No keyboard convention is built into the moving part.
 
-**Example: ``SliderButtons.cs``**
+**Example:** ``SliderButtons.cs``
 
 .. raw:: html
 
@@ -70,6 +78,7 @@ The example does not know the slider's axis, distance or speed. Those remain on 
        public class SliderButtons : MonoBehaviour
        {
            public MovingPart slider;
+       public MovingPartAudio doorAudio;
            private bool forward, backward;
 
            public void SetForward(bool pressed) { forward = pressed; Apply(); }
@@ -90,6 +99,128 @@ The example does not know the slider's axis, distance or speed. Those remain on 
 
 Disabling clears commands at the current pose. A detached ``DamagePart`` ancestor cancels motion so physics owns debris. Controller scheduling normally advances the module; only use ``Tick`` for a loop you explicitly own.
 
+.. _evs-scripting-movingparts--direction-specific-motion-curves:
+
+Direction-specific motion curves
+--------------------------------
+
+MovingPart.increasingMotionCurve and decreasingMotionCurve map normalized elapsed time to bounded travel progress for fixed-target rotation/translation. Linear is the default. Speed/translationSpeed sets average speed; the curve slope redistributes speed within the trip. Repeating the same target preserves progress, while retargeting starts from the actual pose. Instant setters and Stop cancel prior curve state. Rate input and aiming retain their speed-limited control. See :ref:`motion curve setup <evs-movingparts--shape-movement-speed-with-curves>` for curve axes, fallbacks and physical-door behavior.
+
+.. _evs-scripting-movingparts--configure-curves-from-code:
+
+Configure curves from code
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Assign the parts in the Inspector. This example gives both components a gentle start and stop in one direction and a faster initial closing/decreasing motion that slows at the end. Other geometry and speed settings stay in the part components.
+
+.. raw:: html
+
+   <!-- example: PartMotionCurves.cs -->
+
+.. code-block:: csharp
+
+   using UnityEngine;
+   using EasyVehicleSystem;
+
+   public sealed class PartMotionCurves : MonoBehaviour
+   {
+       public MovingPart movingPart;
+       public EasyVehicleSystem.VehicleBodyPart door;
+
+       private static AnimationCurve SlowFinish() => new AnimationCurve(
+           new Keyframe(0, 0, 2, 2), new Keyframe(1, 1, 0, 0));
+
+       private void Awake()
+       {
+           if (movingPart) {
+               movingPart.increasingMotionCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+               movingPart.decreasingMotionCurve = SlowFinish();
+           }
+           if (door) {
+               door.openingMotionCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+               door.closingMotionCurve = SlowFinish();
+           }
+       }
+   }
+
+.. _evs-scripting-movingparts--subscribe-to-operation-events-and-configure-cues:
+
+Subscribe to operation events and configure cues
+------------------------------------------------
+
+This component can be attached to a UI/controller object. Assign its door, optional moving part and clips. It configures distinct start/arrival cues and a dedicated closing-arrival emitter, and subscribes/unsubscribes through the public API. The optional MovingPart callback uses the same Inspector event object that designers can wire without code.
+
+.. raw:: html
+
+   <!-- example: PartOperationEventsExample.cs -->
+
+.. code-block:: csharp
+
+   using EasyVehicleSystem;
+   using UnityEngine;
+
+   public sealed class PartOperationEventsExample : MonoBehaviour
+   {
+       public EasyVehicleSystem.VehicleBodyPart door;
+       public MovingPart slider;
+       public MovingPartAudio doorAudio;
+       public Transform latchAudioAnchor;
+       public AudioClip openingClip;
+       public AudioClip closedClip;
+
+       private void OnEnable()
+       {
+           if (door && doorAudio) {
+               doorAudio.motionSource = door;
+               door.OpeningStarted += OnOpening;
+               door.ClosingCompleted += OnClosed;
+               doorAudio.movementAudio.SetClips(PartMotionEvent.OpeningStarted, openingClip);
+               doorAudio.movementAudio.SetClips(PartMotionEvent.ClosingCompleted, closedClip);
+               var closing = doorAudio.movementAudio.closingCompleted;
+               closing.overrideSettings = true;
+               closing.audioAnchor = latchAudioAnchor;
+               closing.volume = 0.8f;
+               closing.spatialBlend = 1;
+           }
+           if (slider) slider.motionEvents.GetEvent(PartMotionEvent.OpeningCompleted).AddListener(OnSliderOpened);
+       }
+
+       private void OnDisable()
+       {
+           if (door && doorAudio) {
+               doorAudio.motionSource = door;
+               door.OpeningStarted -= OnOpening;
+               door.ClosingCompleted -= OnClosed;
+           }
+           if (slider) slider.motionEvents.GetEvent(PartMotionEvent.OpeningCompleted).RemoveListener(OnSliderOpened);
+       }
+
+       public void OpenDoor() { if (door) door.Open(); }
+       public void CloseDoor() { if (door) door.Close(); }
+       private void OnOpening() => Debug.Log("Opening starts before the door moves.");
+       private void OnClosed() => Debug.Log("The actual door has reached its closing target.");
+       private void OnSliderOpened() => Debug.Log("The moving part reached its opening target.");
+   }
+
+The public IsOpening/IsClosing properties describe pending operations. On MovingPartAudio, audio settings and clip arrays can also be edited directly; GetSettings resolves a cue’s active override. PlayMotionAudio returns whether it played a cue; GetMotionAudioSource never creates a source. StopMotionAudio affects generated sources only. Interrupting an operation does not emit its completed event. See :ref:`event timing, endpoint and source ownership rules <evs-movingparts--motion-events-and-four-audio-cues>`.
+
+.. _evs-scripting-movingparts--wipers:
+
+Wipers
+------
+
+``Wipers`` belongs to the Exterior module category and owns blade clocks, parking and audio. ``WiperBlade`` owns geometry; ``WiperSwitchBinding`` connects an interior stalk to the exterior module. See :doc:`setup </Wipers>` and the :doc:`API </API/Wipers>`.
+
+``Wipers`` owns a separate phase clock for each ``Wiper`` entry. ``WiperBlade`` remains geometry-only. Helpers must be listed explicitly; do not schedule another timer for the same blade. Existing entries inherit the module's running/speed/audio defaults unless individual settings are enabled, so equally configured blades remain synchronized.
+
+Each entry has a unique, case-sensitive ``id``. ``independentSettings`` selects its authored ``running`` and ``cyclesPerMinute``; ``overrideAudio`` independently selects entry clips, volume and pitch synchronization. Entry ``audioSource`` can bind a dedicated voice. Independent rates/requests receive private generated voices when needed, while inherited synchronized entries can share the module's audio source without replaying the same stroke for each blade.
+
+``SetRunning(bool)``, ``Toggle()`` and ``SetSpeed(float)`` operate on all entries; setting group speed intentionally replaces individual rates. ID overloads affect one blade, even when it inherits authored defaults. ``RestoreWiperControl(id)`` clears its runtime overrides. ``IsRunning`` reports any running request and ``IsParked`` requires all phases at zero; query one blade through ``IsWiperRunning(id)``, ``GetSpeed(id)`` and ``GetWiper(id).IsParked``/``CurrentPhase``.
+
+Stopping completes that blade's current cycle. Zero speed pauses its phase, so a stopped blade at zero speed needs a positive rate to finish or an explicit ``Park(id)``/``ParkAll()`` for immediate parking. Disable parks every blade while retaining requests. Registration rejects duplicate IDs and reused helpers/blades; removal immediately parks and releases generated audio, preserving user-provided sources. Call ``CaptureRestPoses`` only at the intended neutral geometry.
+
+``WiperStrokeStarted``, ``WiperRunningChanged``, ``WiperSpeedChanged`` and ``WiperParked`` identify individual entries. Aggregate ``StrokeStarted`` coalesces equal directions within one Tick; aggregate ``RunningChanged`` reports changes to the any-running state. Direct field edits do not publish API running/speed notifications. ``Tick`` advances once per rendered frame and rejects disabled modules and non-finite elapsed times.
+
 .. _evs-scripting-movingparts--complete-public-method-and-event-index:
 
 Complete public method and event index
@@ -97,12 +228,22 @@ Complete public method and event index
 
 The lists below cover public methods and events for this topic and their package base contracts. Signatures include overloads. See :doc:`the detailed general moving parts API </API/MovingParts>` for arguments, return semantics, state and configuration. An override replaces the matching inherited implementation; it is not an additional call to make.
 
-.. _evs-scripting-movingparts--imodule:
+.. _evs-scripting-movingparts--ipartmotionsource:
 
-IModule
-~~~~~~~
+IPartMotionSource
+~~~~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IPartMotionSource <evs-api-movingparts--ipartmotionsource>` gives the full declared contract.
+
+-  ``event Action MotionAudioStopped`` — Requests stopping movement audio after interruption or disable.
+-  ``event Action<PartMotionEvent> MotionOccurred`` — Reports an admitted movement phase to optional presentation receivers.
+
+.. _evs-scripting-movingparts--ivehiclemodule:
+
+IVehicleModule
+~~~~~~~~~~~~~~
+
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -112,12 +253,107 @@ IModule
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-movingparts--module:
+.. _evs-scripting-movingparts--movingpart:
 
-Module
-~~~~~~
+MovingPart
+~~~~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`MovingPart <evs-api-movingparts--movingpart>` gives the full declared contract.
+
+-  ``public event System.Action ClosingCompleted`` — Current closing completed.
+-  ``public event System.Action ClosingStarted`` — Current closing started.
+-  ``public event System.Action MotionAudioStopped`` — Requests stopping movement audio after interruption or disable.
+-  ``public event System.Action<bool> MotionEnabledChanged`` — // Reports a changed movement request after pending motion is stopped when disabling.
+-  ``public event System.Action<PartMotionEvent> MotionOccurred`` — Reports an admitted movement phase to optional presentation receivers.
+-  ``public event System.Action<MovingPart> Moved`` — // Reports this moving part after its actual pose changes.
+-  ``public event System.Action OpeningCompleted`` — Current opening completed.
+-  ``public event System.Action OpeningStarted`` — Current opening started.
+-  ``public virtual void AimAt(Transform target)`` — Current aim at.
+-  ``public virtual void AimAt(Vector3 worldPoint)`` — Current aim at.
+-  ``public virtual void CaptureNeutralPose()`` — // Explicit rebasing for runtime authoring; repeated Configure never captures an animated pose.
+-  ``public virtual float ClampAngle(float angle)`` — // Clamps to sorted travel limits when enabled; unrestricted parts retain unwrapped rotation.
+-  ``public virtual float ClampPosition(float value)`` — Current clamp position.
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual void GetRotationFrame(out Vector3 worldPivot, out Quaternion worldNeutralRotation)`` — // Read the neutral rotation frame without capturing/rebasing or moving the part.
+-  ``public virtual void GetTranslationFrame(out Vector3 origin, out Vector3 direction)`` — // Shared by simulation and gizmos. Direction is unit length so all limits remain in metres.
+-  ``public virtual void ReturnToNeutral()`` — Current return to neutral.
+-  ``public virtual void SetAngle(float angle)`` — Current set angle.
+-  ``public virtual void SetInput(float input)`` — Current set input.
+-  ``public virtual void SetMotionEnabled(bool value)`` — Current set motion enabled.
+-  ``public virtual void SetNormalizedPosition(float value)`` — Current set normalized position.
+-  ``public virtual void SetPosition(float value)`` — Current set position.
+-  ``public virtual void SetTargetAngle(float angle, bool shortestPath = true)`` — Current set target angle.
+-  ``public virtual void SetTargetPosition(float value)`` — Current set target position.
+-  ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` — Current step.
+-  ``public virtual void Stop()`` — // Stops the current operation and clears the transient command that would otherwise continue it.
+-  ``public virtual void Tick(float deltaTime)`` — Current tick.
+
+.. _evs-scripting-movingparts--partmotionaudio:
+
+PartMotionAudio
+~~~~~~~~~~~~~~~
+
+:ref:`PartMotionAudio <evs-api-movingparts--partmotionaudio>` gives the full declared contract.
+
++---------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
+| Member                                                                          | Meaning                                                                                                                |
++=================================================================================+========================================================================================================================+
+| ``public AudioClip[] GetClips(PartMotionEvent motionEvent)``                    | Returns the selected cue’s clip array by reference. Invalid event values throw ArgumentOutOfRangeException.            |
++---------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
+| ``public void SetClips(PartMotionEvent motionEvent, params AudioClip[] clips)`` | Replaces the selected clip array; null becomes an empty array. Invalid event values throw ArgumentOutOfRangeException. |
++---------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
+
++--------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Audio member                                                             | Behavior                                                                                                                                                                         |
++==========================================================================+==================================================================================================================================================================================+
+| ``public VehicleAudioSettings GetSettings(PartMotionEvent motionEvent)`` | Returns the selected cue override when Override Settings is enabled, otherwise returns the shared audioSettings instance. Invalid enum values throw ArgumentOutOfRangeException. |
++--------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-movingparts--partmotionevents:
+
+PartMotionEvents
+~~~~~~~~~~~~~~~~
+
+:ref:`PartMotionEvents <evs-api-movingparts--partmotionevents>` gives the full declared contract.
+
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                                      | Meaning                                                                                                                                            |
++=============================================================+====================================================================================================================================================+
+| ``public UnityEvent openingStarted``                        | Inspector callback for opening Started. On PartMotionAudio this is the optional settings override for that cue.                                    |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent openingCompleted``                      | Inspector callback for opening Completed. On PartMotionAudio this is the optional settings override for that cue.                                  |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent closingStarted``                        | Inspector callback for closing Started. On PartMotionAudio this is the optional settings override for that cue.                                    |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent closingCompleted``                      | Inspector callback for closing Completed. On PartMotionAudio this is the optional settings override for that cue.                                  |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public UnityEvent GetEvent(PartMotionEvent motionEvent)`` | Returns the selected Inspector UnityEvent for subscribing with AddListener/RemoveListener. Invalid event values throw ArgumentOutOfRangeException. |
++-------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-movingparts--steeringpart:
+
+SteeringPart
+~~~~~~~~~~~~
+
+:ref:`SteeringPart <evs-api-movingparts--steeringpart>` gives the full declared contract.
+
+.. _evs-scripting-movingparts--methods:
+
+Methods
+^^^^^^^
+
++-------------------------------------------------------------+------------------------------------------------------+-----------------------------+
+| Signature                                                   | Role and behavior                                    | Arguments and result        |
++=============================================================+======================================================+=============================+
+| ``public override void Configure(VehicleController owner)`` | Resolves the fallback vehicle when none is assigned. | ``owner`` — Owning vehicle. |
++-------------------------------------------------------------+------------------------------------------------------+-----------------------------+
+
+.. _evs-scripting-movingparts--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -141,59 +377,129 @@ Module
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-movingparts--movingpart:
+.. _evs-scripting-movingparts--wiperblade:
 
-MovingPart
+WiperBlade
 ~~~~~~~~~~
 
-:ref:`MovingPart <evs-api-movingparts--movingpart>` gives the full declared contract.
+:ref:`WiperBlade <evs-api-wipers--wiperblade>` gives the full declared contract.
 
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                                | Role                                                                                                                                |
-+=======================================================================================================+=====================================================================================================================================+
-| ``public override void Configure(VehicleController vehicle)``                                         | Ensures its neutral pose is captured without recapturing every configuration.                                                       |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)``            | Advances ``Tick`` using the controller's timestep; no second caller is needed while registered.                                     |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Tick(float deltaTime)``                                                         | Advances the declaring presentation/state machine by elapsed seconds; avoid a second call when its built-in owner already ticks it. |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float ClampAngle(float angle)``                                                      | Returns the requested angle restricted by the moving part's configured angular policy.                                              |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetMotionEnabled(bool value)``                                                  | Changes moving-part actuation availability and its notification state.                                                              |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetInput(float input)``                                                         | Takes signed rate-input ownership for the configured rotation/translation mode; zero pauses rate travel.                            |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetTargetAngle(float angle, bool shortestPath = true)``                         | Requests smooth motion toward a bounded angle, optionally using shortest-arc policy.                                                |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetAngle(float angle)``                                                         | Immediately applies a moving-part/geometry rotation in degrees.                                                                     |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void AimAt(Vector3 worldPoint)``                                                     | Starts or updates world-target tracking around the configured allowed axis; the overload selects a point or a live transform.       |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void AimAt(Transform target)``                                                       | Starts or updates world-target tracking around the configured allowed axis; the overload selects a point or a live transform.       |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Stop()``                                                                        | Clears moving-part rate, target and tracking requests at its current pose.                                                          |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void ReturnToNeutral()``                                                             | Requests movement toward the configured neutral pose within the part's limits.                                                      |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float ClampPosition(float value)``                                                   | Returns a translation offset restricted to the configured travel limits.                                                            |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetTargetPosition(float value)``                                                | Requests smooth motion toward a bounded translation offset.                                                                         |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetPosition(float value)``                                                      | Applies an immediate bounded translation offset in metres from the captured neutral pose.                                           |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetNormalizedPosition(float value)``                                            | Maps a 0–1 fraction across the moving part's translation interval.                                                                  |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void CaptureNeutralPose()``                                                          | Replaces a moving part's neutral baseline and clears its previous motion requests.                                                  |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void GetRotationFrame(out Vector3 worldPivot, out Quaternion worldNeutralRotation)`` | Returns the moving part's configured rotation pivot/orientation frame.                                                              |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void GetTranslationFrame(out Vector3 origin, out Vector3 direction)``                | Returns the configured frame used to interpret translation travel.                                                                  |
-+-------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
+.. _evs-scripting-movingparts--methods-1:
 
-+----------------------------------------------------+------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                   | Role                                                                                                             |
-+====================================================+==================================================================================================================+
-| ``public event Action<MovingPart> Moved``          | After moving-part pose changes. Payload: the ``MovingPart``; inspect current pose/state synchronously if needed. |
-+----------------------------------------------------+------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<bool> MotionEnabledChanged`` | When moving-part motion availability changes. Payload: bool.                                                     |
-+----------------------------------------------------+------------------------------------------------------------------------------------------------------------------+
+Methods
+^^^^^^^
+
++-----------------------------------------------+----------------------------------------------------------------------------------------------------------+----------------------+
+| Signature                                     | Role and behavior                                                                                        | Arguments and result |
++===============================================+==========================================================================================================+======================+
+| ``public virtual void CaptureRestPose()``     | Captures the currently authored rest pose for this geometry mapper or blade.                             | —                    |
++-----------------------------------------------+----------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void ParkImmediate()``       | Places the blade at its parked pose without waiting for a wiper cycle.                                   | —                    |
++-----------------------------------------------+----------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetValue(float value)`` | Applies normalized blade stroke using the captured spindle/rest geometry; it does not run a wiper clock. | —                    |
++-----------------------------------------------+----------------------------------------------------------------------------------------------------------+----------------------+
+
+.. _evs-scripting-movingparts--wipers-1:
+
+Wipers
+~~~~~~
+
+:ref:`Wipers <evs-api-wipers--wipers>` gives the full declared contract.
+
+.. _evs-scripting-movingparts--events-and-inspector-callbacks:
+
+Events and Inspector callbacks
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| Member                                                    | Meaning                                                                                                                   |
++===========================================================+===========================================================================================================================+
+| ``public event Action Parked``                            | When wipers reach their parked state. No payload.                                                                         |
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<bool> RunningChanged``              | When the wiper running request changes. Payload: bool; a stop can still finish the current cycle.                         |
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<float> SpeedChanged``               | After ``SetSpeed`` changes requested wiper speed. Payload: configured cycle-speed value; zero pauses motion.              |
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<bool> StrokeStarted``               | When a wiper stroke starts. Payload: returning bool, ``true`` for the return stroke and ``false`` for the outward stroke. |
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<string> WiperParked``               | When an entry reaches/is immediately placed at its parked pose; payload is its ID.                                        |
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<string, bool> WiperRunningChanged`` | After an API changes an entry's effective running request; payload is its ID and new bool request.                        |
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<string, float> WiperSpeedChanged``  | After an API changes an entry's effective speed; payload is its ID and cycles per minute.                                 |
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<string, bool> WiperStrokeStarted``  | Reports entry ID and stroke direction: false for outward, true for return. Entries have independent phase clocks.         |
++-----------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-movingparts--methods-2:
+
+Methods
+^^^^^^^
+
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| Signature                                                       | Role and behavior                                                                                                                                                                                                                                   | Arguments and result |
++=================================================================+=====================================================================================================================================================================================================================================================+======================+
+| ``public virtual void CaptureRestPoses()``                      | Captures rest poses for the wiper geometry owned by the module.                                                                                                                                                                                     | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public override void Configure(VehicleController vehicle)``   | Applies current blade pose only during Play Mode so Edit Mode configuration does not recapture an animated neutral pose.                                                                                                                            | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual AudioSource GetAudioSource(string id = null)`` | Returns the shared source or the last resolved source for the selected wiper ID without modifying Audio Settings.                                                                                                                                   | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual float GetSpeed(string id)``                    | Reports the identified entry's effective cycles per minute. Returns zero for an unresolved ID.                                                                                                                                                      | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual Wiper GetWiper(string id)``                    | Finds a blade entry by exact ID. Returns null for blank, missing or ambiguous duplicate IDs.                                                                                                                                                        | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual bool IsWiperRunning(string id)``               | Reports the identified entry's effective request, including runtime overrides. False for an unresolved ID; a stopped blade can still be finishing its cycle.                                                                                        | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual bool Park(string id)``                         | Stops and immediately parks one entry without completing its cycle; returns false for an unresolved ID.                                                                                                                                             | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void ParkAll()``                               | Stops every entry and immediately parks all blades and stops their stroke audio.                                                                                                                                                                    | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual bool RegisterWiper(Wiper wiper)``              | Adds an entry with a unique, nonblank ID. Returns false for null, duplicate IDs, duplicate entries or reused helper/blade references.                                                                                                               | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual bool RestoreWiperControl(string id)``          | Clears one entry's runtime running/speed overrides, returning it to its current independent authored settings or shared defaults. Returns false for unresolved IDs.                                                                                 | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetRunning(bool value)``                  | Requests the wiper running state; stopping finishes the current cycle before parking.                                                                                                                                                               | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual bool SetRunning(string id, bool value)``       | The bool-only overload sets every entry's request and clears per-entry running overrides. The ID overload changes only that entry and returns false for an unresolved ID. Stopping finishes the current cycle.                                      | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetSpeed(float speed)``                   | Changes wiper cycle speed; zero pauses cycle motion.                                                                                                                                                                                                | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual bool SetSpeed(string id, float speed)``        | The float-only overload applies the rate to every entry and clears individual speed overrides. The ID overload changes only one rate. Rates are clamped to zero or greater; non-finite values are rejected. ID overload returns false on rejection. | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void Tick(float deltaTime)``                   | Advances the declaring presentation/state machine by elapsed seconds; avoid a second call when its built-in owner already ticks it.                                                                                                                 | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void Toggle()``                                | Requests the opposite current body/switch/wiper/profile/gear state through the declaring component.                                                                                                                                                 | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual bool Toggle(string id)``                       | The no-argument overload stops all entries if any is requested running, otherwise starts all. The ID overload toggles one entry and returns false for an unresolved ID.                                                                             | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual bool UnregisterWiper(string id)``              | Immediately parks and removes the identified entry and releases its generated audio source. User-provided audio sources are retained. Returns false for unresolved IDs.                                                                             | —                    |
++-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+
+-  ``public event Action<Wiper, bool, float> StrokeAudioRequested`` — Wiper lifecycle and presentation notification.
+
+-  ``public event Action<Wiper> WiperRemoved`` — Wiper lifecycle and presentation notification.
+
+-  ``public event Action AudioStopped`` — Wiper lifecycle and presentation notification.
+
+-  ``public event Action StrokeBatchStarted`` — Wiper lifecycle and presentation notification.
+
+.. _evs-scripting-movingparts--wiperswitchbinding:
+
+WiperSwitchBinding
+~~~~~~~~~~~~~~~~~~
+
+:ref:`WiperSwitchBinding <evs-api-wipers--wiperswitchbinding>` gives the full declared contract.
+
+.. _evs-scripting-movingparts--methods-3:
+
+Methods
+^^^^^^^
+
++-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| Signature                                           | Role and behavior                                                                                                                   | Arguments and result |
++=====================================================+=====================================================================================================================================+======================+
+| ``public virtual void Synchronize(bool immediate)`` | Synchronizes presentation/selector state with its source; gearbox synchronization is not a validated driving shift request.         | —                    |
++-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void Tick(float deltaTime)``       | Advances the declaring presentation/state machine by elapsed seconds; avoid a second call when its built-in owner already ticks it. | —                    |
++-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------+

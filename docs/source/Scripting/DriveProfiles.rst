@@ -15,11 +15,11 @@ Implementation map
 +-----------------------+---------------------------------------------------------------------------------+
 | Class                 | Responsibility                                                                  |
 +=======================+=================================================================================+
-| ``DriveProfile``      | Defines settings creation, configuration, stepping and drive-demand resolution. |
-+-----------------------+---------------------------------------------------------------------------------+
 | ``Drive``             | Executes the active strategy and holds per-vehicle movement history.            |
 +-----------------------+---------------------------------------------------------------------------------+
 | ``DriveDefaults``     | Builds initial settings for supported movement families.                        |
++-----------------------+---------------------------------------------------------------------------------+
+| ``DriveProfile``      | Defines settings creation, configuration, stepping and drive-demand resolution. |
 +-----------------------+---------------------------------------------------------------------------------+
 | ``ProfileSwitcher``   | Owns two authored profiles and coordinates requests to change between them.     |
 +-----------------------+---------------------------------------------------------------------------------+
@@ -63,6 +63,15 @@ The extension hooks serve different stages:
 
 Override only the hooks needed by the new behavior. A subclass that retains the movement family can usually retain its settings and demand resolution while extending ``Step``.
 
+.. _evs-scripting-driveprofiles--release-forces-without-replacing-a-profile:
+
+Release forces without replacing a profile
+------------------------------------------
+
+The built-in controller API provides ``ReleaseAllForces()``, ``RestoreAllForces()`` and ``ForcesReleased``. Profiles expose corresponding methods taking a VehicleController, keeping transient release state on the vehicle. Use :ref:`the Inspector setup and full behavior contract <evs-driveprofiles--release-and-restore-all-vehicle-forces>` before adding application crash/recovery rules.
+
+Release suspends both the profile and scheduled shared force assists, not just engine thrust. Restore resumes from current motion without clearing velocity. Explicit restore overrides the current automatic ignition-off interval; the next ignition cycle can release again. ResetVehicle remains independent; the demo invokes RestoreAllForces explicitly from its reset handler.
+
 .. _evs-scripting-driveprofiles--derive-from-a-movement-family:
 
 Derive from a movement family
@@ -74,7 +83,7 @@ The example keeps the base wheel mechanics by calling ``base.Step`` before addin
 
 This serializable mode retains wheel behavior and adds speed-dependent downforce. Return a fresh ``Settings`` object from ``CreateSettings``. Add the script to a runtime assembly; it can then appear in the managed-reference selector.
 
-**Example: ``UtilityWheeledProfile.cs``**
+**Example:** ``UtilityWheeledProfile.cs``
 
 .. raw:: html
 
@@ -183,11 +192,11 @@ This example owns simple forward/reverse thrust, yaw, linear resistance and brak
                float speedAlongDemand = vehicle.ForwardSpeed * Mathf.Sign(throttle);
                float limit = Mathf.Max(.1f, maximumSpeed);
                float fade = Mathf.Clamp01((limit - speedAlongDemand) / Mathf.Max(.1f, limit * .1f));
-               body.AddForce(vehicle.transform.forward * throttle * Mathf.Max(0, acceleration) * fade,
+               body.AddForce(vehicle.transform.forward * vehicle.DriveDirectionSign * throttle * Mathf.Max(0, acceleration) * fade,
                    ForceMode.Acceleration);
 
                float resistance = Mathf.Max(0, linearResistance)
-                   + Mathf.Clamp01(command.Brake) * Mathf.Max(0, brakeResistance);
+                   + Mathf.Clamp01(command.ServiceBrake) * Mathf.Max(0, brakeResistance);
                body.AddForce(-body.linearVelocity * resistance, ForceMode.Acceleration);
                body.AddTorque(vehicle.transform.up * Mathf.Clamp(command.Steering, -1, 1)
                    * Mathf.Max(0, yawAcceleration) - body.angularVelocity * Mathf.Max(0, yawDamping),
@@ -241,9 +250,9 @@ Before applying a target, the selected route receives ``CanBegin(vehicle, from, 
 
 Use ``InputGate.Route.profileId`` to associate any number of registrations with input providers. A two-position ``ProfileSwitchBinding`` maps explicit ``onProfileId`` and ``offProfileId`` values; it can select any two registrations without assuming either is a HoverProfile.
 
-Assign a ``ProfileTransition`` component for geometry/contact rules. Add a multi-mode switch with ``ProfileSwitcher``; use the example below for registration and UI button bindings. Configure supporting modules and transition components separately.
+Assign a ``ProfileTransition`` component for geometry/contact rules. Configure recordings separately under **Profile Transition Audio > Sounds**, assigning the transition and forward/reverse clips. Add a multi-mode switch with ``ProfileSwitcher``; use the example below for registration and UI button bindings. Configure supporting modules and transition components separately.
 
-**Example: ``DriveModeButtons.cs``**
+**Example:** ``DriveModeButtons.cs``
 
 .. raw:: html
 
@@ -285,6 +294,46 @@ Call RegisterModes once during setup on a vehicle whose current profile is its r
 
 Support modules and geometry stay independently authored. A strategy change alone does not create a water provider, gear wheels or control pivots.
 
+.. _evs-scripting-driveprofiles--toggle-flight-and-water-mechanics:
+
+Toggle flight and water mechanics
+---------------------------------
+
+The public boolean fields on the built-in profiles gate individual force/assistance channels without modifying their numeric tuning. These switches are read each Step and do not require ApplyConfiguration. Wheel ownership and other configuration-time settings retain their normal configuration contract. Change the active profile instance; when switching profiles later, the newly selected profile has its own switch values.
+
+.. raw:: html
+
+   <!-- example: VehicleMechanicsSwitches.cs -->
+
+.. code-block:: csharp
+
+   using EasyVehicleSystem;
+   using UnityEngine;
+
+   public sealed class VehicleMechanicsSwitches : MonoBehaviour
+   {
+       public VehicleController vehicle;
+
+       public void SetFlightAssistance(bool enabled)
+       {
+           if (vehicle && vehicle.driveProfile is AirplaneProfile aircraft) {
+               aircraft.flightAlignmentEnabled = enabled;
+               aircraft.coordinatedTurnEnabled = enabled;
+               aircraft.bankCompensationEnabled = enabled;
+           }
+       }
+
+       public void SetBoatWaves(bool enabled)
+       {
+           if (vehicle && vehicle.driveProfile is BoatProfile boat) {
+               boat.ambientWavesEnabled = enabled;
+               boat.waveImpulsesEnabled = enabled;
+           }
+       }
+   }
+
+Switches gate profile contributions rather than freezing the Rigidbody or disabling gravity. Parent channels and the existing powered/immersion conditions still apply. Individual switches and their dependencies are listed in the Inspector reference for :ref:`fixed-wing flight <evs-inspectorreference-drive--airplaneprofile>`, :ref:`helicopter <evs-inspectorreference-drive--helicopterprofile>`, :ref:`hover <evs-inspectorreference-drive--hoverprofile>` and :ref:`boat <evs-inspectorreference-drive--boatprofile>`.
+
 .. _evs-scripting-driveprofiles--complete-public-method-and-event-index:
 
 Complete public method and event index
@@ -299,13 +348,9 @@ Drive
 
 :ref:`Drive <evs-api-driveprofiles--drive>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                            |
-+============================================================================================+=================================================================================================+
-| ``public override void Configure(VehicleController vehicle)``                              | Rebinds teleport reset, clears hold/boat/hover history and configures the current profile.      |
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Clears inapplicable hold state, then invokes the active ``DriveProfile.Step`` for this vehicle. |
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------+
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual void ResetVehicleState(VehicleResetReason reason)`` — Clears transient state for the supplied reset reason without changing persistent configuration.
+-  ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` — Current step.
 
 .. _evs-scripting-driveprofiles--drivedefaults:
 
@@ -329,21 +374,33 @@ DriveProfile
 
 :ref:`DriveProfile <evs-api-driveprofiles--driveprofile>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                              |
-+============================================================================================+===================================================================================================================+
-| ``public virtual Settings CreateSettings()``                                               | Returns a fresh initial shared settings object for explicit creation/profile selection.                           |
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Configure(VehicleController vehicle)``                               | Empty base strategy setup hook; family implementations may ensure helpers and apply profile-owned settings.       |
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public abstract void Step(VehicleController vehicle, Command command, float deltaTime)`` | Abstract movement-strategy step called by Drive; apply the selected family's movement using this vehicle context. |
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public virtual DriveProfile Clone()``                                                    | Creates an independent serialized profile-configuration copy; configure it on its destination vehicle before use. |
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float ResolveDriveDemand(VehicleController vehicle, Command command)``    | Maps the command and strategy state to propulsion demand for surrounding mechanics.                               |
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public virtual float ResolveExternalDriveIntent(VehicleController vehicle)``             | Returns signed non-wheel propulsion intent used by shared coasting/contact policy.                                |
-+--------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                                                                                                        |
++============================================================================================+=============================================================================================================================================================================================+
+| ``public virtual void ReleaseAllForces(VehicleController vehicle)``                        | Release the supplied vehicle through its controller API. vehicle: target owner; runtime state stays on that vehicle, not the serialized profile.                                            |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void RestoreAllForces(VehicleController vehicle)``                        | Clear the target vehicle manual release through its controller API. Overrides the current ignition-off interval; the next running/off cycle can release again. Preserves pose and velocity. |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool AreForcesReleased(VehicleController vehicle)``                       | Query the target vehicle effective force-release state. Returns false for a missing vehicle; includes both manual and ignition-policy release.                                              |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public abstract void Step(VehicleController vehicle, Command command, float deltaTime)`` | Abstract movement-strategy step called by Drive; apply the selected family's movement using this vehicle context.                                                                           |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool CanUsePropulsionBoost(VehicleController vehicle)``                   | Checks the profile propulsion switch and required water/support context before activation.                                                                                                  |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual DriveProfile Clone()``                                                    | Creates an independent serialized profile-configuration copy; configure it on its destination vehicle before use.                                                                           |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float ResolveBoostDemand(VehicleController vehicle, Command command)``    | Returns finite normalized propulsion/collective intent for boost admission; each profile selects relevant axes.                                                                             |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float ResolveDriveDemand(VehicleController vehicle, Command command)``    | Maps the command and strategy state to propulsion demand for surrounding mechanics.                                                                                                         |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float ResolveExternalDriveIntent(VehicleController vehicle)``             | Returns signed non-wheel propulsion intent used by shared coasting/contact policy.                                                                                                          |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual float ResolvePropulsionBoostMultiplier(VehicleController vehicle)``       | Returns the resolved native-thrust multiplier; custom profiles consume it in their own force law.                                                                                           |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual Settings CreateSettings()``                                               | Returns a fresh initial shared settings object for explicit creation/profile selection.                                                                                                     |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Configure(VehicleController vehicle)``                               | Empty base strategy setup hook; family implementations may ensure helpers and apply profile-owned settings.                                                                                 |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-driveprofiles--freeprofile:
 
@@ -384,20 +441,24 @@ HoverProfile
 
 :ref:`HoverProfile <evs-api-driveprofiles--hoverprofile>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                  |
-+============================================================================================+=======================================================================================+
-| ``public override void Configure(VehicleController vehicle)``                              | Ensures a ``HoverVisuals`` helper exists for the hover family.                        |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Applies powered vertical support, horizontal drive, attitude response and resistance. |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------+
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                            |
++============================================================================================+=================================================================================================================+
+| ``public override bool CanUsePropulsionBoost(VehicleController vehicle)``                  | Checks the profile propulsion switch and required water/support context before activation.                      |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public override float ResolveBoostDemand(VehicleController vehicle, Command command)``   | Returns finite normalized propulsion/collective intent for boost admission; each profile selects relevant axes. |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public override void Configure(VehicleController vehicle)``                              | Ensures a ``HoverVisuals`` helper exists for the hover family.                                                  |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Applies powered vertical support, horizontal drive, attitude response and resistance.                           |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-driveprofiles--imodule:
+.. _evs-scripting-driveprofiles--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -407,12 +468,69 @@ IModule
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-driveprofiles--module:
+.. _evs-scripting-driveprofiles--motorcycleprofile:
 
-Module
-~~~~~~
+MotorcycleProfile
+~~~~~~~~~~~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`MotorcycleProfile <evs-api-driveprofiles--motorcycleprofile>` gives the full declared contract.
+
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                                |
++============================================================================================+=====================================================================================================================+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Provides fallback family balance only when enabled and no dedicated ``MotorcycleBalance`` owns that responsibility. |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-driveprofiles--profileswitcher:
+
+ProfileSwitcher
+~~~~~~~~~~~~~~~
+
+:ref:`ProfileSwitcher <evs-api-driveprofiles--profileswitcher>` gives the full declared contract.
+
+-  ``public UnityEvent completed`` — Invoked when the transition finishes and the destination profile is active.
+-  ``public event Action<DriveProfile> ProfileChanged`` — Current profile changed.
+-  ``public event Action ProfilesChanged`` — Current profiles changed.
+-  ``public UnityEvent<float> progressed`` — Invoked as transition progress changes; use it to update an animation or progress display.
+-  ``public UnityEvent started`` — Invoked when an admitted profile transition starts.
+-  ``public event Action TransitionAudioStopped`` — Requests stopping transition presentation.
+-  ``public event Action<ProfileTransition, string, string> TransitionBegan`` — Reports the admitted transition component, source profile ID and destination profile ID.
+-  ``public event Action TransitionCompleted`` — Current transition completed.
+-  ``public event Action TransitionInterrupted`` — Current transition interrupted.
+-  ``public event Action<float> TransitionProgressed`` — Current transition progressed.
+-  ``public event Action TransitionStarted`` — Current transition started.
+-  ``public virtual bool ClearProfiles()`` — Current clear profiles.
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual DriveProfile GetProfile(string id)`` — Current get profile.
+-  ``public virtual bool RegisterProfile(string id, DriveProfile profile)`` — Current register profile.
+-  ``public virtual bool SetProfiles(IEnumerable<DriveProfileSlot> slots)`` — Current set profiles.
+-  ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` — Current step.
+-  ``public virtual bool SwitchTo(DriveProfile target)`` — Current switch to.
+-  ``public virtual bool SwitchTo(string id)`` — Current switch to.
+-  ``public virtual bool SwitchToNext()`` — Current switch to next.
+-  ``public virtual void Toggle()`` — Current toggle.
+-  ``public virtual bool UnregisterProfile(string id)`` — Current unregister profile.
+
+.. _evs-scripting-driveprofiles--profiletransition:
+
+ProfileTransition
+~~~~~~~~~~~~~~~~~
+
+:ref:`ProfileTransition <evs-api-driveprofiles--profiletransition>` gives the full declared contract.
+
+-  ``public virtual void Begin(VehicleController vehicle, DriveProfile from, DriveProfile to)`` — Current begin.
+-  ``public virtual bool CanBegin(VehicleController vehicle, DriveProfile from, DriveProfile to)`` — Current can begin.
+-  ``public virtual void Complete(VehicleController vehicle)`` — Current complete.
+-  ``public virtual bool Matches(string fromId, string toId)`` — Current matches.
+-  ``public virtual void Progress(VehicleController vehicle, float progress)`` — Current progress.
+-  ``public virtual void Step(VehicleController vehicle, float progress, float remainingTime, float deltaTime)`` — // Physics-only transition assistance; never called by render-frame presentation updates.
+
+.. _evs-scripting-driveprofiles--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -435,95 +553,6 @@ Module
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-driveprofiles--motorcycleprofile:
-
-MotorcycleProfile
-~~~~~~~~~~~~~~~~~
-
-:ref:`MotorcycleProfile <evs-api-driveprofiles--motorcycleprofile>` gives the full declared contract.
-
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                                |
-+============================================================================================+=====================================================================================================================+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Provides fallback family balance only when enabled and no dedicated ``MotorcycleBalance`` owns that responsibility. |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-driveprofiles--profileswitcher:
-
-ProfileSwitcher
-~~~~~~~~~~~~~~~
-
-:ref:`ProfileSwitcher <evs-api-driveprofiles--profileswitcher>` gives the full declared contract.
-
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Signature                                                                                  | Behavior                                                                                                                                                                                                                  |
-+============================================================================================+===========================================================================================================================================================================================================================+
-| ``public override void Configure(VehicleController vehicle)``                              | Binds the owner and reconnects its current profile to the saved active ID. Does not recreate removed registrations.                                                                                                       |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Consumes ToggleProfile, advances the selected route and restores target contacts at completion.                                                                                                                           |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual DriveProfile GetProfile(string id)``                                      | Finds a registered profile by case-sensitive ID, or returns null.                                                                                                                                                         |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool RegisterProfile(string id, DriveProfile profile)``                   | Appends a non-null profile with a unique nonblank ID and unique instance. Rejects changes during switching or transition.                                                                                                 |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool UnregisterProfile(string id)``                                       | Removes a slot. Removing the active registration leaves the vehicle strategy running and clears ActiveProfileId; no automatic switch occurs.                                                                              |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SetProfiles(IEnumerable<DriveProfileSlot> slots)``                   | Atomically replaces/reorders the list after validation. Duplicate IDs, shared instances, null entries and blank IDs reject the entire replacement. Preserves the active ID only when its current instance is included.    |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool ClearProfiles()``                                                    | Clears all registrations without replacing the current vehicle strategy. Rejected during switching/transition.                                                                                                            |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SwitchTo(string id)``                                                | Requests a registered profile by ID. Rejects disabled/unconfigured switchers, overlapping changes, invalid wheel requirements and ambiguous/rejected routes. A pair without a matching enabled route changes immediately. |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SwitchTo(DriveProfile target)``                                      | Selects an already registered instance; does not implicitly register it.                                                                                                                                                  |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Toggle()``                                                           | Requests the next profile in list order. Suitable for UnityEvent bindings.                                                                                                                                                |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SwitchToNext()``                                                     | Requests the next list entry and wraps at the end. With no registered active ID, requests the first entry. Empty lists and requests for the same current instance return false.                                           |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<DriveProfile> ProfileChanged``                                       | After an accepted change has configured the target. Payload: target strategy. For animated routes, this precedes transition completion.                                                                                   |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action ProfilesChanged``                                                    | After successful registration, removal or list replacement. Does not imply a strategy change.                                                                                                                             |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action TransitionStarted``                                                  | After target configuration and matching route initialization. Not emitted for immediate changes.                                                                                                                          |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<float> TransitionProgressed``                                        | During animation, with normalized progress.                                                                                                                                                                               |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action TransitionCompleted``                                                | After animation, target contacts and final presentation are restored.                                                                                                                                                     |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action TransitionInterrupted``                                              | On disable during a transition, after finalizing the selected target and presentation.                                                                                                                                    |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public UnityEvent started``                                                              | Inspector callback when an animated route starts.                                                                                                                                                                         |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public UnityEvent<float> progressed``                                                    | Inspector callback with normalized animation progress.                                                                                                                                                                    |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public UnityEvent completed``                                                            | Inspector callback after animated route completion.                                                                                                                                                                       |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-driveprofiles--profiletransition:
-
-ProfileTransition
-~~~~~~~~~~~~~~~~~
-
-:ref:`ProfileTransition <evs-api-driveprofiles--profiletransition>` gives the full declared contract.
-
-+---------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| Signature                                                                                                     | Behavior                                                                                                            |
-+===============================================================================================================+=====================================================================================================================+
-| ``public virtual bool Matches(string fromId, string toId)``                                                   | Matches the configured pair of registration IDs and optional reverse direction.                                     |
-+---------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``public virtual AudioClip GetClip(string fromId, string toId)``                                              | Returns the forward or reverse sound for the selected direction. Called after route matching.                       |
-+---------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool CanBegin(VehicleController vehicle, DriveProfile from, DriveProfile to)``               | Checks admission before any target configuration; receives the actual source and destination strategies.            |
-+---------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Begin(VehicleController vehicle, DriveProfile from, DriveProfile to)``                  | Initializes presentation after the target is configured. Base implementation optionally supplies a takeoff impulse. |
-+---------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Step(VehicleController vehicle, float progress, float remainingTime, float deltaTime)`` | Physics-only assistance per fixed step, using progress and remaining time; base implementation is empty.            |
-+---------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Progress(VehicleController vehicle, float progress)``                                   | Applies presentation for the supplied normalized progress; base implementation is empty.                            |
-+---------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Complete(VehicleController vehicle)``                                                   | Finalizes presentation after target contacts are restored; also called when disabling an active switcher.           |
-+---------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-driveprofiles--wheeledprofile:
 

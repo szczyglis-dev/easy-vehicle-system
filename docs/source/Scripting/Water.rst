@@ -15,19 +15,19 @@ Implementation map
 +------------------------+----------------------------------------------------------------------+
 | Class                  | Responsibility                                                       |
 +========================+======================================================================+
-| ``WaterProvider``      | Abstract sampling adapter and ``WaterSample`` data contract.         |
-+------------------------+----------------------------------------------------------------------+
-| ``WaterSurface``       | Built-in water-surface provider implementation.                      |
-+------------------------+----------------------------------------------------------------------+
-| ``WaterInteraction``   | Connects the active water movement family to sampling/contact state. |
-+------------------------+----------------------------------------------------------------------+
 | ``BoatProfile``        | Consumes water support and flow for boat movement.                   |
 +------------------------+----------------------------------------------------------------------+
-| ``SubmarineProfile``   | Consumes water state for underwater movement.                        |
+| ``BoatWaterParticles`` | Uses hull-water contact for surface-water presentation.              |
 +------------------------+----------------------------------------------------------------------+
 | ``Drive``              | Retains per-vehicle hold targets and movement history.               |
 +------------------------+----------------------------------------------------------------------+
-| ``BoatWaterParticles`` | Uses hull-water contact for surface-water presentation.              |
+| ``SubmarineProfile``   | Consumes water state for underwater movement.                        |
++------------------------+----------------------------------------------------------------------+
+| ``WaterInteraction``   | Connects the active water movement family to sampling/contact state. |
++------------------------+----------------------------------------------------------------------+
+| ``WaterProvider``      | Abstract sampling adapter and ``WaterSample`` data contract.         |
++------------------------+----------------------------------------------------------------------+
+| ``WaterSurface``       | Built-in water-surface provider implementation.                      |
 +------------------------+----------------------------------------------------------------------+
 
 .. _evs-scripting-water--sampling-contract:
@@ -57,7 +57,7 @@ Return ``false`` outside valid water or when the external system cannot supply a
 
 ``WaterProvider.TrySample`` returns height, a world-space unit normal and world water velocity, or ``false`` outside water. Supply finite values. Boat/Submarine sampling uses the vehicle's ``WaterInteraction``; assigned disabled/dry providers do not silently fall back. With no provider, ``useProfileFallback`` permits the profile plane/bounds.
 
-``WaterInteraction`` reads only Boat/Submarine modes. ``Surface``-boat audio/particles use its hull contact; submarine buoyancy sampling does not imply surface wake. ``WaterInteraction``'s master switch removes water physics too; disable effects on their own components when buoyancy should remain.
+``WaterInteraction`` reads only Boat/Submarine modes. Surface-boat audio/particles use its hull contact; submarine buoyancy sampling does not imply surface wake. ``WaterInteraction``'s master switch removes water physics too; disable effects on their own components when buoyancy should remain.
 
 .. _evs-scripting-water--bounded-flat-water-with-a-current:
 
@@ -70,7 +70,7 @@ For a third-party ocean, replace only the contents of ``TrySample`` with its sup
 
 Attach this provider to a water object, configure its world X/Z center/size and assign it to ``WaterInteraction``. Height and current are world-space values. The adapter supplies physics samples; rendering is separate.
 
-**Example: ``CurrentWaterProvider.cs``**
+**Example:** ``CurrentWaterProvider.cs``
 
 .. raw:: html
 
@@ -111,7 +111,7 @@ Query a provider from an application tool
 
 A placement tool or diagnostic display can use the same provider contract as a vehicle. This example queries a configured world marker and stores the most recent result. It does not assume that a failed query means height zero, because zero can be a valid water height.
 
-**Example: ``WaterProbeReadout.cs``**
+**Example:** ``WaterProbeReadout.cs``
 
 .. raw:: html
 
@@ -149,7 +149,7 @@ Read ``LastSample`` only when ``HasWater`` is ``true`` for the latest refresh. T
 Height and depth hold
 ---------------------
 
-The hold behavior is a feedback controller: it retains a target, compares current support-relative height/depth and applies available correction through the movement model. It therefore has different behavior from directly assigning the rigidbody's position. It can react gradually and remain affected by current, drag and limited thrust.
+The hold behavior is a feedback controller: it retains a target world height, compares that with the current vehicle height and applies available correction through the movement model. Submarine depth hold therefore does not track each passing wave or seabed distance. It therefore has different behavior from directly assigning the rigidbody's position. It can react gradually and remain affected by current, drag and limited thrust.
 
 For a custom hold interface, feed the lift/hold-related intent through the supported input/profile path and display retained/actual state separately. A manual lift input can release or update the target, so an instrument should not assume that the target remains fixed while the pilot is actively commanding vertical motion.
 
@@ -157,7 +157,7 @@ A custom water provider should supply consistent samples before tuning hold resp
 
 A hold target is runtime state, not a shared profile setting. It represents where this particular vehicle is trying to remain. On a handover or reset, decide whether the application wants to preserve or reacquire that target; do not copy another vehicle's retained target as part of a tuning preset.
 
-``Hold`` authority remains bounded by powered support. It is not a positional lock on the rigidbody, so current and other physical effects can still act. A display should distinguish an enabled hold request from the vehicle having reached the requested altitude or depth.
+Hold authority remains bounded by powered support. It is not a positional lock on the rigidbody, so current and other physical effects can still act. A display should distinguish an enabled hold request from the vehicle having reached the requested altitude or depth.
 
 Helicopter altitude hold and Submarine depth hold retain targets on ``Drive``, separately per vehicle. Lift input releases/updates the target. Holds require powered support and reset when leaving their applicable mode or after the relevant reset/configuration boundary. Submarine water resistance and flow remain active while hold corrects height.
 
@@ -170,7 +170,7 @@ Choose animation demand according to the device. A main propeller may follow pro
 
 When debugging, verify mechanical motion using the profile and water samples first, then configure shaft direction and immersion gating. A stationary mesh does not prove missing thrust, and a spinning mesh does not prove the hull is inside valid water.
 
-Base ``Propulsion`` applies to Helicopter, Airplane, Hover and Submarine. Its propellers can use engine RPM or a fixed base speed. See the :ref:`Boat extension <evs-scripting-boat--animate-a-boat-propeller>` for that additional family. Only With Thrust gates/scales by selected demands; Reverse With Thrust uses propulsion intent, not hull velocity. ``Steering``/Lift/Pitch flags add maneuver demand. Only In Water tests immersion for water vehicles. Instant Thrust Response bypasses the presentation response times.
+Base ``Propulsion`` applies to Helicopter, Airplane, Hover and Submarine. Its propellers can use engine RPM or a fixed base speed. See the :ref:`Boat extension <evs-scripting-boat--animate-a-boat-propeller>` for that additional family. Only With Thrust gates/scales by selected demands; Reverse With Thrust uses propulsion intent, not hull velocity. Steering/Lift/Pitch flags add maneuver demand. Only In Water tests immersion for water vehicles. Instant Thrust Response bypasses the presentation response times.
 
 These options animate shaft speed; they do not set physical thrust. Use drive-profile controls for movement and :doc:`water setup </Water>` for hull/effect authoring.
 
@@ -217,12 +217,12 @@ FreeProfile
 | ``public override float ResolveDriveDemand(VehicleController vehicle, Command command)`` | Maps the command and strategy state to propulsion demand for surrounding mechanics. |
 +------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------+
 
-.. _evs-scripting-water--imodule:
+.. _evs-scripting-water--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -232,12 +232,31 @@ IModule
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-water--module:
+.. _evs-scripting-water--submarineprofile:
 
-Module
-~~~~~~
+SubmarineProfile
+~~~~~~~~~~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`SubmarineProfile <evs-api-water--submarineprofile>` gives the full declared contract.
+
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                            |
++============================================================================================+=================================================================================================================+
+| ``public override bool CanUsePropulsionBoost(VehicleController vehicle)``                  | Checks the profile propulsion switch and required water/support context before activation.                      |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public override float ResolveBoostDemand(VehicleController vehicle, Command command)``   | Returns finite normalized propulsion/collective intent for boost admission; each profile selects relevant axes. |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Samples valid water, applies immersion-dependent buoyancy/resistance and powered movement/depth-hold response.  |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool ContainsWater(Vector3 position)``                                    | Checks whether a position lies inside this profile's fallback water region.                                     |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-water--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -260,21 +279,6 @@ Module
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-water--submarineprofile:
-
-SubmarineProfile
-~~~~~~~~~~~~~~~~
-
-:ref:`SubmarineProfile <evs-api-water--submarineprofile>` gives the full declared contract.
-
-+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                           |
-+============================================================================================+================================================================================================================+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Samples valid water, applies immersion-dependent buoyancy/resistance and powered movement/depth-hold response. |
-+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool ContainsWater(Vector3 position)``                                    | Checks whether a position lies inside this profile's fallback water region.                                    |
-+--------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-water--waterinteraction:
 

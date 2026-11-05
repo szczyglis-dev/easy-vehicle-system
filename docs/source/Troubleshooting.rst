@@ -49,7 +49,7 @@ Characters and controls
 | Entry animation is rejected            | Seat reservation, vehicle speed, outside clearance, motion adapter and complete animation-profile bindings.                         |
 +----------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+
 
-Use the seated preview before checking dynamic restraints. See :doc:`Passengers </Passengers>`, :doc:`Handles </SeatsAndHandles>` and :doc:`Access </PassengerAccess>`.
+Use the seated preview before checking dynamic restraints. See :doc:`Passengers </Passengers>`, :doc:`Handles </Seats>` and :doc:`Access </PassengerAccess>`.
 
 .. _evs-troubleshooting--water-effects-and-rendering:
 

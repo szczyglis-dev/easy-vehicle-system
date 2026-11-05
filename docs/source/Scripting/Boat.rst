@@ -12,21 +12,21 @@ Tune the system in that order: establish an appropriate floating waterline, tune
 Implementation map
 ------------------
 
-+----------------------+--------------------------------------------------------------------------------+
-| Class                | Responsibility                                                                 |
-+======================+================================================================================+
-| ``BoatProfile``      | Owns authored boat movement parameters and the profile behavior.               |
-+----------------------+--------------------------------------------------------------------------------+
-| ``Drive``            | Retains the vehicle's boat motion and sampling history.                        |
-+----------------------+--------------------------------------------------------------------------------+
-| ``DrivePhysics``     | Contains shared movement calculations used by profiles.                        |
-+----------------------+--------------------------------------------------------------------------------+
-| ``BoatRocking``      | Calculates the boat's trim/rocking response.                                   |
-+----------------------+--------------------------------------------------------------------------------+
-| ``WaterInteraction`` | Connects vehicle water sampling and hull contact state.                        |
-+----------------------+--------------------------------------------------------------------------------+
-| ``Propulsion``       | Animates supported propeller/rotor geometry; extensible for boat presentation. |
-+----------------------+--------------------------------------------------------------------------------+
++----------------------+--------------------------------------------------------------------+
+| Class                | Responsibility                                                     |
++======================+====================================================================+
+| ``BoatProfile``      | Owns authored boat movement parameters and the profile behavior.   |
++----------------------+--------------------------------------------------------------------+
+| ``Drive``            | Retains the vehicle's boat motion and sampling history.            |
++----------------------+--------------------------------------------------------------------+
+| ``DrivePhysics``     | Contains shared movement calculations used by profiles.            |
++----------------------+--------------------------------------------------------------------+
+| ``BoatRocking``      | Calculates the boat's trim/rocking response.                       |
++----------------------+--------------------------------------------------------------------+
+| ``WaterInteraction`` | Connects vehicle water sampling and hull contact state.            |
++----------------------+--------------------------------------------------------------------+
+| ``Propulsion``       | Animates propellers and rotors for aircraft, boats and submarines. |
++----------------------+--------------------------------------------------------------------+
 
 ``BoatProfile`` applies buoyancy, water-relative resistance, powered thrust and rudder torque. It reads shared provider samples where configured; fallback bounds supply a flat plane otherwise.
 
@@ -39,7 +39,7 @@ Water-relative velocity matters when a provider supplies a current. A hull drift
 
 The fallback plane is useful for a bounded flat-water scene. When an explicit provider is assigned, a failed sample means dry or unavailable water, not a request to silently use the fallback plane. Check shoreline behavior using the provider bounds as well as the rendered shoreline.
 
-``waterLevel`` is the fallback unloaded waterline; ``buoyancyDepth`` controls displacement response and reserve support. ``verticalDamping`` controls heave. ``Engine``-off boats retain buoyancy and passive resistance. Outside water there is no powered water motion or buoyancy.
+``waterLevel`` is the fallback unloaded waterline; ``buoyancyDepth`` controls displacement response and reserve support. ``verticalDamping`` controls heave. Engine-off boats retain buoyancy and passive resistance. Outside water there is no powered water motion or buoyancy.
 
 Forward drag and quadratic speed resistance dissipate propulsion momentum. Lateral resistance separately reduces sideways drift. Yaw damping controls passive turn decay; powered rudder response approaches a bounded rate according to speed and stationary authority.
 
@@ -78,7 +78,7 @@ The sample changes the vehicle-local ``BoatProfile.forwardDragScale``, so the ad
 
 Call ``Apply`` from a tuning UI after assigning a Boat vehicle. It edits the local mode and reapplies configuration. Other profile types are ignored.
 
-**Example: ``BoatCoastingControl.cs``**
+**Example:** ``BoatCoastingControl.cs``
 
 .. raw:: html
 
@@ -119,7 +119,7 @@ After installing the component, configure the propeller's axis and demand flags 
 
 The base ``Propulsion`` component supports Helicopter, Airplane, Hover and Submarine, not Boat. Use a presentation subclass when a boat needs its mesh animation. Add this in place of ``Propulsion``, assign engine and propeller pivots, and configure the per-propeller demand flags. It changes supported presentation, not the Boat profile's thrust.
 
-**Example: ``BoatPropellerPresentation.cs``**
+**Example:** ``BoatPropellerPresentation.cs``
 
 .. raw:: html
 
@@ -153,13 +153,25 @@ BoatProfile
 
 :ref:`BoatProfile <evs-api-boat--boatprofile>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                       |
-+============================================================================================+============================================================================================================+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Resolves steering, samples water and applies buoyancy, water-relative resistance, thrust and trim/rocking. |
-+--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool ContainsWater(Vector3 position)``                                    | Checks whether a position lies inside this profile's fallback water region.                                |
-+--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------+
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                               |
++============================================================================================+====================================================================================================================+
+| ``public event System.Action<bool> SinkingChanged``                                        | Reports explicit sinking state changes once per transition.                                                        |
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetBuoyancyEnabled(bool enabled)``                                   | Toggles gravity-derived flotation independently of water damping.                                                  |
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetSinking(bool enabled)``                                           | Suspends or resumes configured upward flotation and damping; preserves the authored switches and current momentum. |
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void StartSinking()``                                                     | Starts sinking under native Rigidbody gravity without altering hull mass or teleporting.                           |
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void StopSinking()``                                                      | Resumes configured flotation at the current depth; does not force a separately disabled buoyancy switch on.        |
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+| ``public override bool CanUsePropulsionBoost(VehicleController vehicle)``                  | Checks the profile propulsion switch and required water/support context before activation.                         |
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Resolves steering, samples water and applies buoyancy, water-relative resistance, thrust and trim/rocking.         |
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool ContainsWater(Vector3 position)``                                    | Checks whether a position lies inside this profile's fallback water region.                                        |
++--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-boat--driveprofile:
 

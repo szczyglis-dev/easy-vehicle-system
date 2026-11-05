@@ -25,7 +25,7 @@ Sources, authors and recorded license information are provided in the accompanyi
 - `Demo/Art/Credits.md` and asset-local license or attribution files: models, materials, textures and animations.
 - `Demo/Audio/Credits.md` and recording-local notices: demo audio.
 - `Demo/Audio/Surfaces/Credits.md`: tire-surface audio.
-- `Runtime/Defaults/Audio/Credits.md`: bundled reusable audio defaults.
+- `Resources/Audio/Credits.md`: bundled reusable audio defaults.
 - `Documentation~/ThirdParty.md` (UPM) or `Documentation/ThirdParty.md` (Asset Store import): guide to the notices.
 
 For UPM, the bundled sample is located in `Samples~/Demo` before import; its imported location is under `Assets/Samples/Easy Vehicle System/<version>/Demo`. In the Asset Store layout, Demo and Runtime are located under `Assets/Szczyglis/EasyVehicleSystem`.

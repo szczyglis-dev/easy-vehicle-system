@@ -7,6 +7,13 @@ The drivetrain turns a driving request into a bounded torque budget at the wheel
 
 This division gives each extension a clear scope. Change a torque curve in the engine, a selection rule in the gearbox, axle distribution in the differential or slip intervention in traction control. Writing wheel torque from an unrelated update loop bypasses those relationships and makes budgets difficult to preserve.
 
+.. _evs-scripting-drivedynamics--configure-in-the-inspector-first:
+
+Configure in the Inspector first
+--------------------------------
+
+Build a :ref:`driving chassis <evs-physics--inspector-quick-start-a-basic-driving-chassis>`, then configure :ref:`gearbox <evs-gearbox--inspector-quick-start>`, :ref:`clutch <evs-clutch--inspector-quick-start>`, :ref:`differential <evs-differential--inspector-quick-start>` and :ref:`traction control <evs-tractioncontrol--inspector-quick-start>` through their Engine-category panels. Apply/save and test the ordinary drivetrain before replacing torque or selection policies in code.
+
 .. _evs-scripting-drivedynamics--implementation-map:
 
 Implementation map
@@ -15,24 +22,33 @@ Implementation map
 +----------------------+-------------------------------------------------------------+
 | Class                | Responsibility                                              |
 +======================+=============================================================+
-| ``Engine``           | Resolves running state, RPM and propulsion torque/power.    |
-+----------------------+-------------------------------------------------------------+
-| ``Transmission``     | Selects Direct, Manual or Automatic transmission operation. |
-+----------------------+-------------------------------------------------------------+
-| ``Gearbox``          | Shared validated selection, ratios and shift state.         |
-+----------------------+-------------------------------------------------------------+
 | ``AutomaticGearbox`` | Makes automatic shift decisions from operating conditions.  |
-+----------------------+-------------------------------------------------------------+
-| ``ManualGearbox``    | Provides the manually selected gearbox implementation.      |
 +----------------------+-------------------------------------------------------------+
 | ``Clutch``           | Models coupling and finite rotational energy transfer.      |
 +----------------------+-------------------------------------------------------------+
 | ``Differential``     | Distributes driven axle torque.                             |
 +----------------------+-------------------------------------------------------------+
+| ``Engine``           | Resolves running state, RPM and propulsion torque/power.    |
++----------------------+-------------------------------------------------------------+
+| ``Gearbox``          | Shared validated selection, ratios and shift state.         |
++----------------------+-------------------------------------------------------------+
+| ``ManualGearbox``    | Provides the manually selected gearbox implementation.      |
++----------------------+-------------------------------------------------------------+
 | ``TractionControl``  | Limits propulsion according to contact capacity and slip.   |
++----------------------+-------------------------------------------------------------+
+| ``Transmission``     | Selects Direct, Manual or Automatic transmission operation. |
 +----------------------+-------------------------------------------------------------+
 
 For user setup, see :doc:`Gearbox </Gearbox>`, :doc:`Clutch </Clutch>`, :doc:`Differential </Differential>` and :doc:`Traction control </TractionControl>`. Boat and track behavior have separate :doc:`references </Scripting/index>`.
+
+.. _evs-scripting-drivedynamics--longitudinal-direction:
+
+Longitudinal direction
+----------------------
+
+Set ``Engine.invertDriveDirection`` to reverse wheel torque and built-in longitudinal thrust without swapping input commands or selecting reverse gear. ``Engine.DriveDirectionSign`` exposes the polarity; ``VehicleController.DriveDirectionSign`` makes it available to custom drive profiles. ``VehicleController.ForwardSpeed`` reports velocity along that configured direction, so automatic direction changes and brake/reverse resolution retain their normal meaning. ``Engine.OutputTorque`` reports the signed output after inversion. Ignition, clutch energy, power limits and throttle magnitude retain their existing contracts.
+
+This setting affects propulsion. It does not reorient model geometry, suspension, steering geometry or flight control axes. See :ref:`Physics <evs-physics--reverse-longitudinal-propulsion>`.
 
 .. _evs-scripting-drivedynamics--engine-and-gearbox:
 
@@ -45,9 +61,9 @@ For a combustion torque-curve extension, override ``Engine.EvaluateCrankTorque(f
 
 The engine produces torque with RPM response, torque curve and configured power/acceleration limits. Direct drive uses the configured wheel torque budget. With a gearbox, positive ratios and final drive convert crank torque/speed; reverse direction is represented by selected gear. Efficiency and clutch coupling affect transmitted output.
 
-``Gearbox`` selection validates the gear range, direction speed and predicted redline. Shifts interrupt propulsion for the configured duration. ``Synchronize`` is a selector helper and does not replace validated driving requests.
+``Gearbox`` selection validates the gear range, direction speed and predicted redline. A higher forward gear with a taller ratio may reduce existing overspeed even if its predicted RPM still exceeds redline, allowing automatic shifting to resume after a Nitro lock is released. Downshifts and engagement from neutral remain redline-guarded. Shifts interrupt propulsion for the configured duration. ``Synchronize`` is a selector helper and does not replace validated driving requests.
 
-Automatic forward shifting requires loaded driven-wheel contact. Grounded RPM/road-speed evidence and hysteresis prevent airborne revving or a spinning tire from cycling through higher gears. Thrust also fades near the configured road-speed envelope; ratios alone do not define attainable top speed.
+Automatic forward shifting requires loaded driven-wheel contact. During low-RPM deceleration, downshifts bypass Minimum Gear Time and may skip intermediate gears to reach a suitable coupled RPM in one shift. At standstill this selects first gear as soon as any current shift completes. Upshifts remain sequential and retain the minimum dwell; direction changes, explicit commands, driver-controlled clutch, boost locks and over-rev protection keep their existing guards. Grounded RPM/road-speed evidence and hysteresis prevent airborne revving or a spinning tire from cycling through higher gears. Thrust also fades near the configured road-speed envelope; ratios alone do not define attainable top speed.
 
 .. _evs-scripting-drivedynamics--request-a-manual-gear:
 
@@ -60,7 +76,7 @@ Treat a ``false`` return as a rejected request. A UI may retain the currently se
 
 Assign a configured vehicle and ``Transmission``. Call ``Select`` from UI/AI. The example selects Manual, resolves the connected gearbox and honors its safety checks.
 
-**Example: ``ManualGearControl.cs``**
+**Example:** ``ManualGearControl.cs``
 
 .. raw:: html
 
@@ -118,7 +134,7 @@ Supply a clutch pedal from an external producer
 
 This adapter writes only clutch travel into an already selected ``ExternalController``. The producer supplies pedal position in 0–1, and disabling the adapter releases that pedal request. Input ownership is still managed by the application's possession/session layer; assigning a controller here does not automatically select it on the vehicle.
 
-**Example: ``ExternalClutchPedal.cs``**
+**Example:** ``ExternalClutchPedal.cs``
 
 .. raw:: html
 
@@ -210,13 +226,31 @@ Brakes
 | ``public override bool SupportsProfile(DriveProfile profile)``          | Checks movement-family compatibility; this is independent of the Unity enabled flag.                             |
 +-------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------+
 
-+-----------------------------------------------------------+-----------------------------------------------------------------------------------+
-| Event / callback                                          | Role                                                                              |
-+===========================================================+===================================================================================+
-| ``public event System.Action<float> ServiceBrakeChanged`` | When resolved service braking changes. Payload: normalized resolved brake demand. |
-+-----------------------------------------------------------+-----------------------------------------------------------------------------------+
-| ``public event System.Action<bool> HandbrakeChanged``     | When resolved handbrake state changes. Payload: bool.                             |
-+-----------------------------------------------------------+-----------------------------------------------------------------------------------+
++-----------------------------------------------------------+--------------------------------------------------------------------------------------+
+| Event / callback                                          | Role                                                                                 |
++===========================================================+======================================================================================+
+| ``public event System.Action<float> ServiceBrakeChanged`` | When resolved service braking changes. Payload: normalized resolved brake demand.    |
++-----------------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public event System.Action<bool> HandbrakeChanged``     | When resolved handbrake state changes. Payload: bool.                                |
++-----------------------------------------------------------+--------------------------------------------------------------------------------------+
+| ``public event System.Action<bool> BrakingChanged``       | Moving service-brake activity changes. Owned by Brakes; independent of TireFeedback. |
++-----------------------------------------------------------+--------------------------------------------------------------------------------------+
+
+.. _evs-scripting-drivedynamics--burnout:
+
+Burnout
+~~~~~~~
+
+:ref:`Burnout <evs-api-drivedynamics--burnout>` gives the full declared contract.
+
+-  ``public event System.Action BurnoutStarted`` — Current burnout started.
+-  ``public event System.Action BurnoutStopped`` — Current burnout stopped.
+-  ``public event System.Action<bool> StateChanged`` — Current state changed.
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public void ResetState()`` — Current reset state.
+-  ``public virtual void ResetVehicleState(VehicleResetReason reason)`` — Clears transient state for the supplied reset reason without changing persistent configuration.
+-  ``public void SetBurnout(bool held)`` — Current set burnout.
+-  ``public override void Step(VehicleController vehicle, Command command, float dt)`` — Current step.
 
 .. _evs-scripting-drivedynamics--clutch-1:
 
@@ -298,31 +332,17 @@ Engine
 
 :ref:`Engine <evs-api-drivedynamics--engine>` gives the full declared contract.
 
-+-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                  | Role                                                                                                                      |
-+=========================================================================+===========================================================================================================================+
-| ``public virtual void ResetState()``                                    | Clears the declaring mechanic's retained simulation history at an explicit reset boundary.                                |
-+-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-| ``public override void Configure(VehicleController vehicle)``           | Caches the owner, synchronizes running state, configures registered gearboxes and resolves missing drivetrain references. |
-+-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController v, Command c, float dt)`` | Resolves running state, demand, RPM and torque output; stopped engines clear their propulsion state.                      |
-+-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void StartEngine()``                                   | Requests ignition, respecting the active fuel/engine policy.                                                              |
-+-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void StopEngine()``                                    | Requests engine shutdown and running-state notifications.                                                                 |
-+-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void ToggleEngine()``                                  | Requests the opposite engine-running state through ignition/shutdown policy.                                              |
-+-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetEngineRunning(bool running)``                  | Requests the engine running state through ignition/fuel policy and transition notifications.                              |
-+-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                        | Role                                                                                                              |
-+=========================================================+===================================================================================================================+
-| ``public event System.Action<bool> EngineStateChanged`` | After engine running state changes. Payload: running bool; a rejected start does not report success.              |
-+---------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<int> GearChanged``         | After accepted gear selection. Payload: signed gear index, with reverse -1, neutral 0 and forward gears positive. |
-+---------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+-  ``public event System.Action<Gearbox> ActiveGearboxChanged`` — Reports a change of effective gearbox identity, including removal or disable. Read ActiveGearbox when first subscribing.
+-  ``public event System.Action<bool> EngineStateChanged`` — Current engine state changed.
+-  ``public event System.Action<int> GearChanged`` — Current gear changed.
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual void ResetState()`` — // Clear mechanical state for a respawn while preserving the ignition switch.
+-  ``public virtual void ResetVehicleState(VehicleResetReason reason)`` — Clears transient state for the supplied reset reason without changing persistent configuration.
+-  ``public virtual void SetEngineRunning(bool running)`` — Current set engine running.
+-  ``public virtual void StartEngine()`` — Current start engine.
+-  ``public override void Step(VehicleController v, Command c, float dt)`` — Current step.
+-  ``public virtual void StopEngine()`` — // Turns ignition off and clears propulsion state without disabling the component or applying parking brakes.
+-  ``public virtual void ToggleEngine()`` — Current toggle engine.
 
 .. _evs-scripting-drivedynamics--gearbox:
 
@@ -331,23 +351,23 @@ Gearbox
 
 :ref:`Gearbox <evs-api-drivedynamics--gearbox>` gives the full declared contract.
 
-+----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                                               | Role                                                                                                                                                                                                                                                                                         |
-+======================================================================================================================+==============================================================================================================================================================================================================================================================================================+
-| ``public virtual void ConfigureFor(VehicleController vehicle, Engine engine)``                                       | Connects and prepares the gearbox for its vehicle and engine context.                                                                                                                                                                                                                        |
-+----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool TrySelectGear(int gear, VehicleController vehicle)``                                           | Selects a signed gear (-1 reverse, 0 neutral, positive forward). Rejects invalid/unchanged gears, an active shift, unsafe direction changes or predicted redline. The vehicle overload verifies this is the engine's active gearbox; the numeric overload takes explicit speed/RPM evidence. |
-+----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool TryShiftUp(VehicleController vehicle)``                                                        | Requests the next higher gear through the gearbox's validated selection path.                                                                                                                                                                                                                |
-+----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool TryShiftDown(VehicleController vehicle)``                                                      | Requests the next lower gear through the gearbox's validated selection path.                                                                                                                                                                                                                 |
-+----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Simulate(VehicleController vehicle, Command command, float wheelRpm, float maxRpm, float dt)`` | Advances gearbox shift/selection state for one mechanical timestep.                                                                                                                                                                                                                          |
-+----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool TrySelectGear(int gear, float forwardSpeed, float wheelRpm, float maxRpm)``                    | Selects a signed gear (-1 reverse, 0 neutral, positive forward). Rejects invalid/unchanged gears, an active shift, unsafe direction changes or predicted redline. The vehicle overload verifies this is the engine's active gearbox; the numeric overload takes explicit speed/RPM evidence. |
-+----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Synchronize(int gear)``                                                                        | Synchronizes the gear selector as an explicit helper. It does not replace ``TrySelectGear`` safety validation for driving input.                                                                                                                                                             |
-+----------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                                               | Role                                                                                                                                                                                                                                                                                       |
++======================================================================================================================+============================================================================================================================================================================================================================================================================================+
+| ``public virtual void ConfigureFor(VehicleController vehicle, Engine engine)``                                       | Connects and prepares the gearbox for its vehicle and engine context.                                                                                                                                                                                                                      |
++----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TrySelectGear(int gear, VehicleController vehicle)``                                           | Selects a signed gear (-1 reverse, 0 neutral, positive forward). Rejects invalid/unchanged gears, an active shift, unsafe direction changes or unsafe over-rev. The vehicle overload verifies this is the engine's active gearbox; the numeric overload takes explicit speed/RPM evidence. |
++----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TryShiftUp(VehicleController vehicle)``                                                        | Requests the next higher gear through the gearbox's validated selection path.                                                                                                                                                                                                              |
++----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TryShiftDown(VehicleController vehicle)``                                                      | Requests the next lower gear through the gearbox's validated selection path.                                                                                                                                                                                                               |
++----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Simulate(VehicleController vehicle, Command command, float wheelRpm, float maxRpm, float dt)`` | Advances gearbox shift/selection state for one mechanical timestep.                                                                                                                                                                                                                        |
++----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TrySelectGear(int gear, float forwardSpeed, float wheelRpm, float maxRpm)``                    | Selects a signed gear (-1 reverse, 0 neutral, positive forward). Rejects invalid/unchanged gears, an active shift, unsafe direction changes or unsafe over-rev. The vehicle overload verifies this is the engine's active gearbox; the numeric overload takes explicit speed/RPM evidence. |
++----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Synchronize(int gear)``                                                                        | Synchronizes the gear selector as an explicit helper. It does not replace ``TrySelectGear`` safety validation for driving input.                                                                                                                                                           |
++----------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 +----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | Event / callback                                   | Role                                                                                                              |
@@ -359,12 +379,12 @@ Gearbox
 | ``public event System.Action<int> ShiftCompleted`` | When that shift interval completes; a zero-duration shift can complete immediately. Payload: gear index.          |
 +----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-drivedynamics--imodule:
+.. _evs-scripting-drivedynamics--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -373,35 +393,6 @@ IModule
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-drivedynamics--module:
-
-Module
-~~~~~~
-
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
-
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                    | Role                                                                                                                                   |
-+===========================================================================================+========================================================================================================================================+
-| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                          | Role                                                                                                              |
-+===========================================================================+===================================================================================================================+
-| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-drivedynamics--motorcyclebalance:
 
@@ -419,6 +410,28 @@ MotorcycleBalance
 +--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+
 | ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.          |
 +--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-drivedynamics--nitro:
+
+Nitro
+~~~~~
+
+:ref:`Nitro <evs-api-drivedynamics--nitro>` gives the full declared contract.
+
+-  ``public event Action<float> AmountChanged`` — Current amount changed.
+-  ``public event Action<bool> BoostStateChanged`` — Current boost state changed.
+-  ``public event Action Depleted`` — Current depleted.
+-  ``public event Action NitroStarted`` — Current nitro started.
+-  ``public event Action NitroStopped`` — Current nitro stopped.
+-  ``public event Action<bool> OutputStateChanged`` — Reports a change of the propulsion-output session. Receivers can be absent without affecting boost.
+-  ``public virtual float AddNitro(float value)`` — Current add nitro.
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual void Refill()`` — Current refill.
+-  ``public virtual void ResetState(bool refill = false)`` — Current reset state.
+-  ``public virtual void ResetVehicleState(VehicleResetReason reason)`` — Clears transient state for the supplied reset reason without changing persistent configuration.
+-  ``public virtual void SetAmount(float value)`` — Current set amount.
+-  ``public virtual void SetBoost(bool held)`` — Current set boost.
+-  ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` — Current step.
 
 .. _evs-scripting-drivedynamics--parkinghold:
 
@@ -507,3 +520,32 @@ Transmission
 +==============================================================+================================================================================+
 | ``public event System.Action<TransmissionMode> ModeChanged`` | After the declaring component's selected mode changes. Payload: its mode enum. |
 +--------------------------------------------------------------+--------------------------------------------------------------------------------+
+
+.. _evs-scripting-drivedynamics--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                    | Role                                                                                                                                   |
++===========================================================================================+========================================================================================================================================+
+| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                          | Role                                                                                                              |
++===========================================================================+===================================================================================================================+
+| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+

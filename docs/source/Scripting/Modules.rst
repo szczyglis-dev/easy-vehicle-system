@@ -17,9 +17,9 @@ Implementation map
 +==========================+=================================================================================+
 | ``VehicleController``    | Owns registration, discovery, configuration and the fixed-step schedule.        |
 +--------------------------+---------------------------------------------------------------------------------+
-| ``Module``               | Base component with enable, configuration, step and profile-support contracts.  |
+| ``VehicleModule``        | Base component with enable, configuration, step and profile-support contracts.  |
 +--------------------------+---------------------------------------------------------------------------------+
-| ``IModule``              | Defines category interfaces and the cross-category ``ExecutionPhase`` sequence. |
+| ``IVehicleModule``       | Defines category interfaces and the cross-category ``ExecutionPhase`` sequence. |
 +--------------------------+---------------------------------------------------------------------------------+
 | ``CategoryCore``         | Groups and orders registered modules within one category.                       |
 +--------------------------+---------------------------------------------------------------------------------+
@@ -63,7 +63,7 @@ Enable a discovered capability
 
 Add the following adapter to an application object, assign its vehicle and call ``SetTraction`` from UI or gameplay. A UI toggle needs to find an installed capability even while it is disabled. Filtering the lookup to active modules would make the “on” action unable to find the very component it must enable. The following adapter therefore uses the default lookup and sends the change through the traction-control action rather than keeping a second local enabled state.
 
-**Example: ``TractionToggle.cs``**
+**Example:** ``TractionToggle.cs``
 
 .. raw:: html
 
@@ -99,7 +99,7 @@ When several modules intentionally implement one capability, query an interface 
 
 Save the two components in the marked files. Install ``VehicleSpeedCapability`` through module registration, assign the vehicle to ``CapabilityReadout``, then call ``Refresh`` when your application needs the readings. ``GetModules`` clears the list before filling it, so repeated refreshes do not accumulate previous results.
 
-**Example: ``VehicleSpeedCapability.cs``**
+**Example:** ``VehicleSpeedCapability.cs``
 
 .. raw:: html
 
@@ -126,7 +126,7 @@ Save the two components in the marked files. Install ``VehicleSpeedCapability`` 
        }
    }
 
-**Example: ``CapabilityReadout.cs``**
+**Example:** ``CapabilityReadout.cs``
 
 .. raw:: html
 
@@ -174,6 +174,15 @@ Vehicle configuration clamps root ``Rigidbody`` mass to at least 100 kg and appl
 
 Registered modules are configured even when disabled. A ``Configure`` method can write persistent native settings; disabling its scheduled ``Step`` does not necessarily undo those writes. For example, native suspension continues using its configured spring settings.
 
+.. _evs-scripting-modules--temporarily-disable-a-module:
+
+Temporarily disable a module
+----------------------------
+
+Use ``module.SetEnabled(false)`` or ``vehicle.SetModuleEnabled<T>(false)`` and pass ``true`` to resume. This changes Unity's ``enabled`` checkbox without removing the component or its Inspector configuration. The vehicle skips modules whose ``isActiveAndEnabled`` is false; that Unity property is read-only. ``SetModuleEnabled<T>`` also finds disabled modules, so the same call can enable them again.
+
+Disabling invokes the module's normal ``OnDisable`` cleanup. For example, audio stops, engine output is cleared, and disabling ``Passengers`` makes seated passengers exit. This is a temporary disable with module-specific cleanup, rather than a frozen simulation state.
+
 .. _evs-scripting-modules--complete-public-method-and-event-index:
 
 Complete public method and event index
@@ -181,12 +190,12 @@ Complete public method and event index
 
 The lists below cover public methods and events for this topic and their package base contracts. Signatures include overloads. See :doc:`the detailed module lifecycle and scheduling API </API/Modules>` for arguments, return semantics, state and configuration. An override replaces the matching inherited implementation; it is not an additional call to make.
 
-.. _evs-scripting-modules--imodule:
+.. _evs-scripting-modules--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -196,12 +205,34 @@ IModule
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-modules--module:
+.. _evs-scripting-modules--ivehicleresethandler:
 
-Module
-~~~~~~
+IVehicleResetHandler
+~~~~~~~~~~~~~~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`IVehicleResetHandler <evs-api-modules--ivehicleresethandler>` gives the full declared contract.
+
+-  ``void ResetVehicleState(VehicleResetReason reason)`` — Clears transient state for the supplied reset reason without changing persistent configuration.
+
+.. _evs-scripting-modules--modulecatalog:
+
+ModuleCatalog
+~~~~~~~~~~~~~
+
+:ref:`ModuleCatalog <evs-api-modules--modulecatalog>` gives the full declared contract.
+
++----------------------------------------------+--------------------------------------------------------------+
+| Method                                       | Role                                                         |
++==============================================+==============================================================+
+| ``public static Type[] GetAvailableTypes()`` | Returns the catalog of eligible module implementation types. |
++----------------------------------------------+--------------------------------------------------------------+
+
+.. _evs-scripting-modules--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -224,16 +255,3 @@ Module
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-modules--modulecatalog:
-
-ModuleCatalog
-~~~~~~~~~~~~~
-
-:ref:`ModuleCatalog <evs-api-modules--modulecatalog>` gives the full declared contract.
-
-+----------------------------------------------+--------------------------------------------------------------+
-| Method                                       | Role                                                         |
-+==============================================+==============================================================+
-| ``public static Type[] GetAvailableTypes()`` | Returns the catalog of eligible module implementation types. |
-+----------------------------------------------+--------------------------------------------------------------+

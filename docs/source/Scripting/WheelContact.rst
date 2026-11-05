@@ -3,7 +3,7 @@
 Wheel configuration and contact
 ===============================
 
-``Wheel`` behavior combines authored wheel definitions, runtime adapters and Unity's native ``WheelCollider``. The native collider provides suspension and primary rolling contact. Optional package systems refine obstacle support and solid tire interactions while the visible mesh follows the resulting wheel pose.
+Wheel behavior combines authored wheel definitions, runtime adapters and Unity's native ``WheelCollider``. The native collider provides suspension and primary rolling contact. Optional package systems refine obstacle support and solid tire interactions while the visible mesh follows the resulting wheel pose.
 
 The important integration rule is to keep authoring, simulation and presentation frames distinct. A mesh can have import offsets and a visual suspension pose without moving the object from which the physics contact is measured.
 
@@ -15,17 +15,17 @@ Implementation map
 +-----------------------+--------------------------------------------------------------------------+
 | Class                 | Responsibility                                                           |
 +=======================+==========================================================================+
-| ``WheelSetup``        | Persists collider, geometry, visual and wheel-role authoring data.       |
-+-----------------------+--------------------------------------------------------------------------+
-| ``Wheel``             | Runtime adapter for one native wheel, actuation and contact state.       |
-+-----------------------+--------------------------------------------------------------------------+
-| ``VehicleController`` | Validates definitions and builds/configures wheel adapters.              |
-+-----------------------+--------------------------------------------------------------------------+
 | ``ContactEnvelope``   | Samples tire-shaped support and adjusts effective native support radius. |
 +-----------------------+--------------------------------------------------------------------------+
 | ``TireCollision``     | Adds supplemental solid tire contacts.                                   |
 +-----------------------+--------------------------------------------------------------------------+
+| ``VehicleController`` | Validates definitions and builds/configures wheel adapters.              |
++-----------------------+--------------------------------------------------------------------------+
+| ``Wheel``             | Runtime adapter for one native wheel, actuation and contact state.       |
++-----------------------+--------------------------------------------------------------------------+
 | ``WheelDynamics``     | Applies wheel rotational behavior including airborne losses.             |
++-----------------------+--------------------------------------------------------------------------+
+| ``WheelSetup``        | Persists collider, geometry, visual and wheel-role authoring data.       |
 +-----------------------+--------------------------------------------------------------------------+
 
 .. _evs-scripting-wheelcontact--wheelsetup-and-wheel:
@@ -35,7 +35,7 @@ WheelSetup and Wheel
 
 For a manually assembled wheel, add ``Wheel`` to the physics wheel object; its required-component declaration also adds ``WheelCollider``. Assign that collider in the controller's wheel definitions and assign a separate visual transform. The controller can create a missing adapter during configuration, but the saved definition remains the source for geometry and roles.
 
-A driven wheel and a steered wheel are independent roles. ``Free``-rolling trailer and aircraft wheels still need contact and brake configuration even when they receive no engine torque. A visual wheel is not a replacement for a native collider, and adding a collider alone does not declare its role in the vehicle.
+A driven wheel and a steered wheel are independent roles. Free-rolling trailer and aircraft wheels still need contact and brake configuration even when they receive no engine torque. A visual wheel is not a replacement for a native collider, and adding a collider alone does not declare its role in the vehicle.
 
 ``WheelSetup`` is the persisted authoring record. ``TryApplyConfiguration`` copies it to a ``Wheel`` adapter on each collider object, creates a missing adapter, sets mass/geometry/roles and configures the registered mechanics. A ``Wheel`` visual is positioned separately from its collider object.
 
@@ -54,7 +54,7 @@ The index comes from the configured wheel list. If an application rebuilds that 
 
 This binds an application action to a wheel index from the configured list. It does not detach a mesh or implement tire damage; use it as the availability layer of your own damage system.
 
-**Example: ``WheelAvailabilityControl.cs``**
+**Example:** ``WheelAvailabilityControl.cs``
 
 .. raw:: html
 
@@ -86,6 +86,10 @@ Do not enable a ``WheelCollider`` independently while a profile transition owns 
 ContactEnvelope
 ---------------
 
+``VehicleController.IsMoving()`` checks total translation and angular velocity (defaults 0.05 m/s and 0.02 rad/s), including direct motion and vertical travel. ContactEnvelope's **Performance / Optimization** foldout enables stationary sampling by default: one batch every ten fixed steps, using configurable speed thresholds. Damping still runs each awake step. Steering changes over 0.1 degrees, mount/centre movement over 1 mm, reparenting and tire radius/width changes also refresh stationary support; tiny pose jitter is tolerated. Movement or a driving/steering request refreshes immediately. A stationary curb correction can be retained between probes; moving significant corrections retain every-step refresh. Existing sleep-only throttling is separate.
+
+Native wheel contacts can replace the extra centre ray only after current corner rays and an overlap query certify an unobstructed box face. The current face supplies the plane; the historical native hit is not accepted blindly. Other terrain and changed/missing contact use the original fresh centre query.
+
 A single native wheel contact is efficient, but a sharp step or narrow obstacle may be poorly represented by a center sample. ``ContactEnvelope`` probes the rolling shape and uses the best supported height to modify the native contact approximation. The extra radius is a temporary solver input, not a visible tire growth effect.
 
 Tune sample density for the obstacles the vehicle must traverse. More probes cost more queries and still cannot make a discontinuous obstacle physically smooth at every speed. Check support normals, layer filtering and the lift cap before increasing resolution; an excluded ground layer cannot be repaired by more samples.
@@ -103,7 +107,7 @@ TireCollision
 
 ``TireCollision`` gives the tire a solid interaction envelope for situations such as a sidewall meeting an obstacle. This complements rolling support rather than replacing the wheel's spring and tread traction. It matters most when contact occurs away from the region already supported by the native wheel/envelope.
 
-``Configure`` the actual wheel radius, width, mass and body clearance first. Check arch colliders and nearby body geometry so supplemental contacts do not begin inside the vehicle. Use the native-only setup as a baseline, then enable supplemental contact and inspect the obstacle case it is intended to solve.
+Configure the actual wheel radius, width, mass and body clearance first. Check arch colliders and nearby body geometry so supplemental contacts do not begin inside the vehicle. Use the native-only setup as a baseline, then enable supplemental contact and inspect the obstacle case it is intended to solve.
 
 A custom collision backend needs a deliberate division of contact responsibility. Preserve suppression of duplicate lower support when the native path is supporting the tire. Otherwise two systems can each provide the full support force, producing an apparent increase in suspension stiffness or lifting the vehicle.
 
@@ -148,22 +152,17 @@ ContactEnvelope
 
 :ref:`ContactEnvelope <evs-api-wheelcontact--contactenvelope>` gives the full declared contract.
 
-+--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                                               |
-+============================================================================================+====================================================================================================================================+
-| ``public override void Configure(VehicleController vehicle)``                              | Restores prior radii, stores the new owner, clears sampling history and resolves Suspension.                                       |
-+--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Samples supported circular tire geometry and updates effective native support radii; sleeping idle bodies use periodic resampling. |
-+--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                               |
-+--------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------+
+-  ``public override void Configure(VehicleController vehicle)`` — Binds the component to its configured owner and selected source.
+-  ``public virtual void ResetVehicleState(VehicleResetReason reason)`` — Clears transient state for the supplied reset reason without changing persistent configuration.
+-  ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` — Current step.
+-  ``public override bool SupportsProfile(DriveProfile profile)`` — Current supports profile.
 
-.. _evs-scripting-wheelcontact--imodule:
+.. _evs-scripting-wheelcontact--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -173,12 +172,29 @@ IModule
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-wheelcontact--module:
+.. _evs-scripting-wheelcontact--tirecollision-1:
 
-Module
-~~~~~~
+TireCollision
+~~~~~~~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`TireCollision <evs-api-wheelcontact--tirecollision>` gives the full declared contract.
+
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                                                  |
++============================================================================================+=======================================================================================================================================+
+| ``public override void Configure(VehicleController vehicle)``                              | During Play Mode, rebuilds owned transient tire proxies, clears pose history and resolves ``ContactEnvelope``.                        |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Advances supplemental tire proxies/contacts, detects discontinuous vehicle motion and preserves the primary rolling-support boundary. |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                  |
++--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-wheelcontact--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -202,23 +218,6 @@ Module
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-wheelcontact--tirecollision-1:
-
-TireCollision
-~~~~~~~~~~~~~
-
-:ref:`TireCollision <evs-api-wheelcontact--tirecollision>` gives the full declared contract.
-
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                                                  |
-+============================================================================================+=======================================================================================================================================+
-| ``public override void Configure(VehicleController vehicle)``                              | During Play Mode, rebuilds owned transient tire proxies, clears pose history and resolves ``ContactEnvelope``.                        |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Advances supplemental tire proxies/contacts, detects discontinuous vehicle motion and preserves the primary rolling-support boundary. |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| ``public override bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                  |
-+--------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-
 .. _evs-scripting-wheelcontact--wheel:
 
 Wheel
@@ -226,11 +225,23 @@ Wheel
 
 :ref:`Wheel <evs-api-wheelcontact--wheel>` gives the full declared contract.
 
-+-------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
-| Method                              | Role                                                                                                                         |
-+=====================================+==============================================================================================================================+
-| ``public virtual void Configure()`` | Applies clamped native radius/mass, captures contact radius and configures native substeps when attached to a ``Rigidbody``. |
-+-------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                              | Role                                                                                                                         |
++=====================================================================================+==============================================================================================================================+
+| ``public virtual bool GetGroundHit(out WheelHit hit)``                              | Contact wrapper for native physics and direct presentation ground queries.                                                   |
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void GetWorldPose(out Vector3 position, out Quaternion rotation)`` | Hub pose including spin/steering in both modes.                                                                              |
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Configure()``                                                 | Applies clamped native radius/mass, captures contact radius and configures native substeps when attached to a ``Rigidbody``. |
++-------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+
++---------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Signature                                                     | Role                                                                                                                                                                                                                                              |
++===============================================================+===================================================================================================================================================================================================================================================+
+| ``public event System.Action<Wheel, bool> AttachmentChanged`` | After state and collider/actuator availability update. Payload: this Wheel and new attached flag.                                                                                                                                                 |
++---------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetAttached(bool attached)``            | Sets low-level wheel attachment state, clears actuators/direct/contact/visual history and updates native collider availability. Notifies once per change. Does not physically detach/remount a visual object; use WheelPart for debris lifecycle. |
++---------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-wheelcontact--wheeldynamics:
 

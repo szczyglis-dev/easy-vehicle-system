@@ -3,6 +3,10 @@
 Extend and integrate
 ====================
 
+To configure built-in systems, begin with :ref:`Basic Inspector workflow <evs-inspectorconfiguration--basic-inspector-workflow>` and the :ref:`Inspector-first guide index <evs-scripting-index--start-with-inspector-setup>`. Adding lights, suspension, clips, particles and ordinary model bindings does not require the custom implementation examples in this chapter.
+
+Start with :doc:`Custom modules </Scripting/CustomModules>` for a complete module tutorial, or :doc:`Profiling and debugging </Scripting/ProfilingAndDebugging>` for captures and custom markers.
+
 For km/h, mph or m/s authoring and readouts, see :doc:`Speed units </SpeedUnits>`.
 
 Extend the package at the boundary that already owns the behavior you want to change. Public actions are the right tool for invoking existing behavior. A derived component changes an implementation. A capability interface lets consumers work with several implementations without knowing their concrete types.
@@ -17,7 +21,7 @@ Implementation map
 +--------------------------+-------------------------------------------------------------------------+
 | Class                    | Responsibility                                                          |
 +==========================+=========================================================================+
-| ``Module``               | Base registration/configuration/step contract for new mechanics.        |
+| ``VehicleModule``        | Base registration/configuration/step contract for new mechanics.        |
 +--------------------------+-------------------------------------------------------------------------+
 | ``PhysicsModule``        | Category base used by the downforce example.                            |
 +--------------------------+-------------------------------------------------------------------------+
@@ -41,27 +45,27 @@ Start with the caller's need. If a UI button should start the engine, call its a
 
 Keep application-specific dependencies in adapters. A reusable vehicle mechanic should not discover the local player, UI canvas or network session itself. Pass a reference or feed commands/events across a small explicit boundary.
 
-+---------------------------------+--------------------------------------------------------+
-| Goal                            | Use                                                    |
-+=================================+========================================================+
-| Trigger an existing behavior    | Its public action or ``UnityEvent`` binding            |
-+---------------------------------+--------------------------------------------------------+
-| Observe state                   | Typed events or telemetry snapshots                    |
-+---------------------------------+--------------------------------------------------------+
-| Supply controls                 | ``IInput``, ``InputBuffer`` or ``ExternalController``  |
-+---------------------------------+--------------------------------------------------------+
-| Add a mechanic                  | A category ``Module`` subclass                         |
-+---------------------------------+--------------------------------------------------------+
-| Alter an existing mechanic      | Its virtual operation in a derived component           |
-+---------------------------------+--------------------------------------------------------+
-| Add a movement family           | A serializable ``DriveProfile``                        |
-+---------------------------------+--------------------------------------------------------+
-| Supply a hand/foot contact      | ``VehicleHandle``                                      |
-+---------------------------------+--------------------------------------------------------+
-| Use another character framework | ``PassengerBody``, a seat strategy or ``AccessMotion`` |
-+---------------------------------+--------------------------------------------------------+
-| Connect an ocean                | ``WaterProvider``                                      |
-+---------------------------------+--------------------------------------------------------+
++---------------------------------+--------------------------------------------------------------+
+| Goal                            | Use                                                          |
++=================================+==============================================================+
+| Trigger an existing behavior    | Its public action or ``UnityEvent`` binding                  |
++---------------------------------+--------------------------------------------------------------+
+| Observe state                   | Typed events or telemetry snapshots                          |
++---------------------------------+--------------------------------------------------------------+
+| Supply controls                 | ``IVehicleInput``, ``InputBuffer`` or ``ExternalController`` |
++---------------------------------+--------------------------------------------------------------+
+| Add a mechanic                  | A category ``VehicleModule`` subclass                        |
++---------------------------------+--------------------------------------------------------------+
+| Alter an existing mechanic      | Its virtual operation in a derived component                 |
++---------------------------------+--------------------------------------------------------------+
+| Add a movement family           | A serializable ``DriveProfile``                              |
++---------------------------------+--------------------------------------------------------------+
+| Supply a hand/foot contact      | ``VehicleHandle``                                            |
++---------------------------------+--------------------------------------------------------------+
+| Use another character framework | ``PassengerBody``, a seat strategy or ``AccessMotion``       |
++---------------------------------+--------------------------------------------------------------+
+| Connect an ocean                | ``WaterProvider``                                            |
++---------------------------------+--------------------------------------------------------------+
 
 Keep one owner for each responsibility. Replacing a mechanic requires updating explicit references and retiring the old implementation. Adding an observer does not.
 
@@ -76,7 +80,7 @@ Choose a category base for responsibility and a phase for dependencies. The down
 
 This component adds downforce in the Assistance phase. Add it through the controller's Custom module menu, or register an existing instance with ``RegisterModule``. A category base supplies category membership; ``Phase`` and ``ExecutionOrder`` select scheduling.
 
-**Example: ``SpeedDownforce.cs``**
+**Example:** ``SpeedDownforce.cs``
 
 .. raw:: html
 
@@ -126,7 +130,7 @@ A script must first be a Unity component, then participate in the package's modu
 4. Put repeatable setup in ``Configure(vehicle)`` and scheduled mechanic work in ``Step(vehicle, command, deltaTime)``. Choose ``Phase`` and ``ExecutionOrder`` for dependencies; do not add a second ``FixedUpdate`` that runs the same work.
 5. Keep the script in your own assembly. The controller's menu places types from the package runtime assembly under **Base** and types from other assemblies under **Custom**.
 
-The category base matters beyond its name. For example, ``PhysicsModule`` implements ``IPhysicsModule``; the Inspector uses that category interface to choose the menu group. Deriving only from ``Module`` and overriding ``Category`` does not supply the interface used by the menu. An ordinary ``MonoBehaviour``, or a class that only implements ``IModule`` without deriving from ``Module``, is not part of the controller's module discovery.
+The category base matters beyond its name. For example, ``PhysicsModule`` implements ``IPhysicsModule``; the Inspector uses that category interface to choose the menu group. Deriving only from ``VehicleModule`` and overriding ``Category`` does not supply the interface used by the menu. An ordinary ``MonoBehaviour``, or a class that only implements ``IVehicleModule`` without deriving from ``VehicleModule``, is not part of the controller's module discovery.
 
 .. _evs-scripting--2-add-through-the-controllers-add-module-menu:
 
@@ -176,7 +180,7 @@ How the controller discovers and runs modules
 
 There are two different searches. The Inspector searches compiled types to populate **Add module**. The runtime controller searches component instances already attached to its hierarchy. A type appearing in the menu does not mean an instance has been installed, and an installed instance does not have to be offered by that menu to be discoverable.
 
-``DiscoverModules()`` uses ``GetComponentsInChildren<Module>(true)``: it includes the root and all inactive/active descendants. It keeps an instance only when its nearest parent ``VehicleController``, including inactive parents, is this controller. A nested vehicle therefore owns its own branch; modules below it are excluded from the outer vehicle. Object names, hierarchy depth and the ``AddComponentMenu`` path do not determine ownership.
+``DiscoverModules()`` uses ``GetComponentsInChildren<VehicleModule>(true)``: it includes the root and all inactive/active descendants. It keeps an instance only when its nearest parent ``VehicleController``, including inactive parents, is this controller. A nested vehicle therefore owns its own branch; modules below it are excluded from the outer vehicle. Object names, hierarchy depth and the ``AddComponentMenu`` path do not determine ownership.
 
 The controller orders discovered modules by effective local order and rebuilds category/phase scheduling. Startup ``Awake`` runs discovery followed by configuration, so components saved on the prefab are available without an application bootstrap script. The controller does not rescan the entire hierarchy every tick. A component added later through ``GameObject.AddComponent`` needs explicit registration or rediscovery.
 
@@ -205,7 +209,7 @@ Create and register a module from code
 
 Call the following methods from your runtime spawn/setup flow after the vehicle itself is configured. Save the component beside ``SpeedDownforce.cs`` in the same example namespace. ``InstallOnRoot`` uses the combined controller API. ``InstallOnChild`` creates an owned child, sets its values, then registers that exact instance.
 
-**Example: ``CustomModuleInstallation.cs``**
+**Example:** ``CustomModuleInstallation.cs``
 
 .. raw:: html
 
@@ -277,9 +281,9 @@ For a hidden optional module, ``[ModuleSetup(ModuleOnly = true, IncludeInFull = 
 When a component is missing
 ---------------------------
 
-If the class is absent from **Add module → Custom**, check compilation, runtime assembly placement, its concrete category base and any inherited ``AddComponentMenu``/``ModuleSetup`` metadata. If an instance is absent from the controller's list, check that it derives from ``Module``, belongs under this controller rather than a nested vehicle, and that discovery has run since it was added.
+If the class is absent from **Add module → Custom**, check compilation, runtime assembly placement, its concrete category base and any inherited ``AddComponentMenu``/``ModuleSetup`` metadata. If an instance is absent from the controller's list, check that it derives from ``VehicleModule``, belongs under this controller rather than a nested vehicle, and that discovery has run since it was added.
 
-If the instance is listed but its ``Step`` does not run, check active/enabled state, ``SupportsProfile``, controller validation errors and whether its system uses a nested scheduler. ``VehicleHandle`` is a passenger-owned helper, not a top-level ``Module``: assign it through the seat/``Passengers`` system and follow :doc:`Handles </Scripting/Handles>`. Audio channels and passenger modules likewise keep their owner-specific update contracts; do not add an independent tick to force them to run.
+If the instance is listed but its ``Step`` does not run, check active/enabled state, ``SupportsProfile``, controller validation errors and whether its system uses a nested scheduler. ``VehicleHandle`` is a passenger-owned helper, not a top-level ``VehicleModule``: assign it through the seat/``Passengers`` system and follow :doc:`Handles </Scripting/Handles>`. Audio channels and passenger modules likewise keep their owner-specific update contracts; do not add an independent tick to force them to run.
 
 .. _evs-scripting--extend-an-existing-operation:
 
@@ -294,7 +298,7 @@ The example below changes only crank-torque evaluation. It retains running-state
 
 Override a virtual operation and call base when retaining its work. This example scales the engine's evaluated crank torque without copying gearbox or clutch logic.
 
-**Example: ``LimitedTorqueEngine.cs``**
+**Example:** ``LimitedTorqueEngine.cs``
 
 .. raw:: html
 
@@ -340,4 +344,13 @@ Fixed nested-scheduler entry points, value snapshots and private caches remain i
 Follow a worked integration
 ---------------------------
 
+Use :doc:`Events reference </Scripting/EventsReference>` to find notifications by name, owner and firing boundary.
+
 :doc:`Input handover </Scripting/Input>`, :doc:`profile creation </Scripting/DriveProfiles>`, :doc:`handle contacts </Scripting/Handles>`, :doc:`custom passengers </Scripting/PassengerControllers>`, :doc:`water adapter </Scripting/Water>`, :doc:`events and telemetry </Scripting/Events>`, :doc:`timed interactions </Scripting/Interactions>` and :doc:`weapon control </Scripting/Weapons>` each provide a complete component example.
+
+.. _evs-scripting--profiling-and-debugging:
+
+Profiling and debugging
+-----------------------
+
+See :doc:`Profiling and debugging </Scripting/ProfilingAndDebugging>` for the capture workflow, built-in markers and a complete custom-marker example.

@@ -15,15 +15,15 @@ Implementation map
 +------------------------+-----------------------------------------------------------------+
 | Class                  | Responsibility                                                  |
 +========================+=================================================================+
+| ``Friction``           | Reads physical grip and writes native tire friction behavior.   |
++------------------------+-----------------------------------------------------------------+
 | ``Surface``            | Stores the physical grip multiplier on a contact collider.      |
 +------------------------+-----------------------------------------------------------------+
-| ``Friction``           | Reads physical grip and writes native tire friction behavior.   |
+| ``TireFeedback``       | Resolves and caches the presentation classification.            |
 +------------------------+-----------------------------------------------------------------+
 | ``TireSurface``        | Maps a collider/hierarchy or Terrain layers to effect profiles. |
 +------------------------+-----------------------------------------------------------------+
 | ``TireSurfaceProfile`` | Stores presentation assets and effect multipliers.              |
-+------------------------+-----------------------------------------------------------------+
-| ``Feedback``           | Resolves and caches the presentation classification.            |
 +------------------------+-----------------------------------------------------------------+
 | ``WheelContact``       | Publishes the selected profile with per-wheel feedback.         |
 +------------------------+-----------------------------------------------------------------+
@@ -50,9 +50,9 @@ Hierarchy lookup is useful when several colliders share one visual surface famil
 
 Treat shared profile assets as reusable configuration. If one vehicle needs a runtime variation, use a deliberate local configuration/asset instance rather than editing a shared asset that every nearby tire reads. Physical grip remains a separate setting even when the visible road, sound and particles all come from one authored surface family.
 
-``Feedback`` resolves ``TireSurface`` from the contact collider or nearest parent, with an owned cache invalidated by mapping revisions. A nearer component takes precedence even when its profile is empty. Without an active nearest ``TireSurface``, ``Feedback`` uses ``defaultSurface``. An active nearest component with an empty profile resolves ``null`` instead of falling through to its parent or ``defaultSurface``. The result is published in each ``WheelContact``.
+``TireFeedback`` resolves ``TireSurface`` from the contact collider or nearest parent, with an owned cache invalidated by mapping revisions. A nearer component takes precedence even when its profile is empty. Without an active nearest ``TireSurface``, ``TireFeedback`` uses ``defaultSurface``. An active nearest component with an empty profile resolves ``null`` instead of falling through to its parent or ``defaultSurface``. The result is published in each ``WheelContact``.
 
-``TireSurfaceProfile`` controls particles, marks, tire audio, rolling activity and a brake-audio multiplier. Empty ``tireLoop`` means silence for that profile. A ``null`` profile uses general vehicle-effect settings. Set ``particlesEnabled``/``marksEnabled`` or per-effect multipliers independently.
+``TireSurfaceProfile`` controls particles, marks, tire audio, rolling activity and brake audio. Its optional ``brakingLoop`` replaces the Brake Audio component recording for wheels on that surface. For empty recordings, ``useDefaultTireLoopWhenEmpty`` and ``useDefaultBrakeLoopWhenEmpty`` independently choose component fallback or silence. Defaults are false for tire audio and true for brake audio. Surface tire volume/pitch apply to its fallback recording; ``brakeAudioMultiplier`` scales either brake recording. A ``null`` profile uses general vehicle-effect settings. Set ``particlesEnabled``/``marksEnabled`` or per-effect multipliers independently.
 
 Terrain mappings sample the dominant painted layer from an editor/runtime-prepared classification. ``RefreshTerrain()`` rebuilds the cache after painting or changing mappings. Painting does not automatically produce a layer-dependent physical friction model.
 
@@ -67,7 +67,7 @@ For a level-authoring workflow, these components can normally be saved directly 
 
 Attach this example to the same object as the ground collider. It configures both systems explicitly. Assign a pre-authored effect profile; it never edits a shared profile asset at runtime.
 
-**Example: ``GroundPatchSetup.cs``**
+**Example:** ``GroundPatchSetup.cs``
 
 .. raw:: html
 
@@ -107,7 +107,7 @@ Replace a presentation mapping at runtime
 
 A generated ground patch can change which effect profile it resolves without editing the shared profile asset. Assign the patch's ``TireSurface``, request another profile, then refresh classification data. This changes new feedback resolution; existing particles/marks keep their recorded lifetimes and properties.
 
-**Example: ``GroundEffectMapping.cs``**
+**Example:** ``GroundEffectMapping.cs``
 
 .. raw:: html
 
@@ -172,12 +172,12 @@ Friction
 | ``public override bool SupportsProfile(DriveProfile profile)``          | Checks movement-family compatibility; this is independent of the Unity enabled flag.                          |
 +-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-surfacefeedback--imodule:
+.. _evs-scripting-surfacefeedback--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -187,12 +187,44 @@ IModule
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-surfacefeedback--module:
+.. _evs-scripting-surfacefeedback--tiresurface:
 
-Module
-~~~~~~
+TireSurface
+~~~~~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`TireSurface <evs-api-surfacefeedback--tiresurface>` gives the full declared contract.
+
++--------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+| Method                                                                               | Role                                                                                                                  |
++======================================================================================+=======================================================================================================================+
+| ``public virtual void RefreshTerrain()``                                             | Rebuilds cached painted-Terrain-layer classification after mapping/paint changes.                                     |
++--------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+| ``public virtual TireSurfaceProfile Resolve(Collider collider, Vector3 worldPoint)`` | Resolves the mapped effect profile for a native hit, including dominant Terrain-layer classification when configured. |
++--------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-surfacefeedback--tiresurfaceprofile:
+
+TireSurfaceProfile
+~~~~~~~~~~~~~~~~~~
+
+:ref:`TireSurfaceProfile <evs-api-surfacefeedback--tiresurfaceprofile>` gives the full declared contract.
+
++-----------------------------------------------------------------+------------------------------------------------------------------------------------+
+| Method                                                          | Role                                                                               |
++=================================================================+====================================================================================+
+| ``public virtual float Rolling(float speed)``                   | Evaluates this surface profile's rolling-presentation activity.                    |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------+
+| ``public virtual float ParticleActivity(WheelContact contact)`` | Evaluates tire-particle activity from rolling/skid inputs and profile multipliers. |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------+
+| ``public virtual float MarkActivity(WheelContact contact)``     | Evaluates skidmark activity using this surface profile's presentation multipliers. |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------+
+
+.. _evs-scripting-surfacefeedback--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -215,35 +247,3 @@ Module
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-surfacefeedback--tiresurface:
-
-TireSurface
-~~~~~~~~~~~
-
-:ref:`TireSurface <evs-api-surfacefeedback--tiresurface>` gives the full declared contract.
-
-+-----------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                  | Role                                                                                                                  |
-+=========================================================================================+=======================================================================================================================+
-| ``[ContextMenu("Refresh terrain surface cache")] public virtual void RefreshTerrain()`` | Rebuilds cached painted-Terrain-layer classification after mapping/paint changes.                                     |
-+-----------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-| ``public virtual TireSurfaceProfile Resolve(Collider collider, Vector3 worldPoint)``    | Resolves the mapped effect profile for a native hit, including dominant Terrain-layer classification when configured. |
-+-----------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-surfacefeedback--tiresurfaceprofile:
-
-TireSurfaceProfile
-~~~~~~~~~~~~~~~~~~
-
-:ref:`TireSurfaceProfile <evs-api-surfacefeedback--tiresurfaceprofile>` gives the full declared contract.
-
-+-----------------------------------------------------------------+------------------------------------------------------------------------------------+
-| Method                                                          | Role                                                                               |
-+=================================================================+====================================================================================+
-| ``public virtual float Rolling(float speed)``                   | Evaluates this surface profile's rolling-presentation activity.                    |
-+-----------------------------------------------------------------+------------------------------------------------------------------------------------+
-| ``public virtual float ParticleActivity(WheelContact contact)`` | Evaluates tire-particle activity from rolling/skid inputs and profile multipliers. |
-+-----------------------------------------------------------------+------------------------------------------------------------------------------------+
-| ``public virtual float MarkActivity(WheelContact contact)``     | Evaluates skidmark activity using this surface profile's presentation multipliers. |
-+-----------------------------------------------------------------+------------------------------------------------------------------------------------+

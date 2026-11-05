@@ -19,29 +19,33 @@ For a wheel vehicle, verify ground contact, steering, propulsion and braking. Fo
 Add the result you want
 -----------------------
 
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Desired result                | Add or configure                                | Prepare first                                                  |
-+===============================+=================================================+================================================================+
-| Different input, AI or replay | Input source                                    | Working movement and command ownership                         |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Manual/automatic gears        | Engine, gearboxes and Transmission              | Driven wheels and ratios                                       |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Driver or passenger           | Passengers and seats                            | Character rig, pelvis position and reachable targets           |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Moving steering wheel/pedals  | Interior animators or handles                   | Independent pivots and neutral anchors                         |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Opening door/window           | BodyPart or MovingPart                          | Hinge/slide frame and collision clearance                      |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Collision damage              | Damage, DamagePart and optional MeshDeformation | Part boundaries, collider ownership and readable visual meshes |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Water support                 | Boat/Submarine and WaterInteraction             | Water provider or profile bounds                               |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Engine/tire sound             | Audio and channels                              | Assigned clips and mechanical state                            |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Dust, marks or splash         | Feedback and the relevant effect                | Contact detection and assigned materials/prefabs               |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
-| Trailer                       | Trailer and Coupler                             | Independent vehicle bodies and nearby hitch anchors            |
-+-------------------------------+-------------------------------------------------+----------------------------------------------------------------+
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Desired result                | Add or configure                                       | Prepare first                                                  |
++===============================+========================================================+================================================================+
+| Different input, AI or replay | Input source                                           | Working movement and command ownership                         |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Optional boost                | :ref:`Nitro <evs-drivingactions--nitro-boost>` module  | Running wheel-powered Engine, throttle and nitro supply        |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Wheelspin launch              | :ref:`Burnout <evs-drivingactions--burnout-launch>`    | Optional Drive module, driven tires, Brakes and Friction       |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Manual/automatic gears        | Engine, gearboxes and Transmission                     | Driven wheels and ratios                                       |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Driver or passenger           | Passengers and seats                                   | Character rig, pelvis position and reachable targets           |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Moving steering wheel/pedals  | Interior animators or handles                          | Independent pivots and neutral anchors                         |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Opening door/window           | VehicleBodyPart or MovingPart                          | Hinge/slide frame and collision clearance                      |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Collision damage              | Damage, DamagePart and optional VehicleMeshDeformation | Part boundaries, collider ownership and readable visual meshes |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Water support                 | Boat/Submarine and WaterInteraction                    | Water provider or profile bounds                               |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Engine/tire sound             | Audio and channels                                     | Assigned clips and mechanical state                            |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Dust, marks or splash         | TireFeedback and the relevant effect                   | Contact detection and assigned materials/prefabs               |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
+| Trailer                       | Trailer and Coupler                                    | Independent vehicle bodies and nearby hitch anchors            |
++-------------------------------+--------------------------------------------------------+----------------------------------------------------------------+
 
 A handle gives a limb a contact target; an animator moves the model; a gameplay binding requests an action. Install the pieces your interaction requires. For example, a door can open without a character, and a character can rest a hand without operating a switch.
 

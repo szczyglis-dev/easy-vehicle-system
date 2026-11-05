@@ -21,7 +21,7 @@ Implementation map
 +----------------------------------+------------------------------------------------------------------------+
 | ``PassengerSeatConstraints``     | Builds and updates vehicle-relative support constraints.               |
 +----------------------------------+------------------------------------------------------------------------+
-| ``PassengerCollisionExclusions`` | ``Tracks`` the passenger collision-exclusion policy.                   |
+| ``PassengerCollisionExclusions`` | Tracks the passenger collision-exclusion policy.                       |
 +----------------------------------+------------------------------------------------------------------------+
 | ``PassengerFreeRagdoll``         | Handles released-body physics and restoration boundaries.              |
 +----------------------------------+------------------------------------------------------------------------+
@@ -35,15 +35,15 @@ Implementation map
 Initialization and update order
 -------------------------------
 
-``Prepare`` the rig before tuning vehicle supports. Check that each intended bone has the correct mass, collider and connection, and that the authored pose is reachable from the seat. Entering the vehicle establishes the seated pose; subsequent physical motion should come from constraints and forces, rather than a separate script teleporting those same bones each frame.
+Prepare the rig before tuning vehicle supports. Check that each intended bone has the correct mass, collider and connection, and that the authored pose is reachable from the seat. Entering the vehicle establishes the seated pose; subsequent physical motion should come from constraints and forces, rather than a separate script teleporting those same bones each frame.
 
 Target timing is part of the integration. A moving joystick or pedal needs to publish its current target before the seat resolves limb support. Keep custom target updates within the relevant ownership/update flow instead of adding an unrelated late writer that causes the hand to chase the previous frame's pose.
 
-Author the humanoid's ``Rigidbody``/``ConfigurableJoint`` skeleton before Play Mode. Saved joints provide axes, connections, anchors and angular bounds. ``Configure`` anatomical joints is an explicit editor operation that can overwrite tuning.
+Author the humanoid's ``Rigidbody``/``ConfigurableJoint`` skeleton before Play Mode. Saved joints provide axes, connections, anchors and angular bounds. **Configure anatomical joints** is an explicit editor operation that can overwrite tuning.
 
-Seating establishes the pelvis and limb pose, prepares grips, then creates vehicle supports. Interior targets advance in Presentation before ``Passengers`` in ``Feedback``. Ordinary physical stepping uses forces/joints rather than positional IK writes. The character Animator is suspended on the physical path and restored on handover.
+Seating establishes the pelvis and limb pose, prepares grips, then creates vehicle supports. Interior targets advance in Presentation before ``Passengers`` in ``TireFeedback``. Ordinary physical stepping uses forces/joints rather than positional IK writes. The character Animator is suspended on the physical path and restored on handover.
 
-An emergency seated-pose guard can recover catastrophic joint separation. It is not the normal support mechanism and does not operate on detached ragdolls.
+Physical arms and legs are not driven towards live IK targets. Controlled arm and leg joints use passive damping and anatomical limits, while the seat, palms and feet provide the actual spring attachments. Explicit relaxed-rest hand settings retain their authored weak springs. There are no additional whole-body stabilizing forces, shoulder-to-wheel reach joints, shrinking capture limits or automatic pose resets. Explicit ``ResetSeatedPose`` and vehicle reset calls still reset immediately. See :ref:`seated physics <evs-seats--seated-recovery-without-pose-resets>`.
 
 .. _evs-scripting-passengerphysics--pelvischest-support:
 
@@ -107,13 +107,13 @@ Use the public policy operations rather than repeatedly calling ``Physics.Ignore
 Configure contact release
 -------------------------
 
-``Collision`` exclusions describe permission, not a release command. The example retains suppressed contacts while seated and permits vehicle contact for the right hand after that limb is released. It does not detach the hand or force an impact. Use the release/damage rules to decide when a limb becomes free.
+Collision exclusions describe permission, not a release command. The example retains suppressed contacts while seated and permits vehicle contact for the right hand after that limb is released. It does not detach the hand or force an impact. Use the release/damage rules to decide when a limb becomes free.
 
 This distinction lets an application configure policy before an occupant enters. The same policy can then be applied to the next character without searching for its bone colliders in gameplay code.
 
 Assign an occupied physical seat or an empty seat configuration. Call ``Apply`` from your setup UI. This permits the right hand to collide with the vehicle after release while retaining entry exclusions.
 
-**Example: ``PassengerContactPolicy.cs``**
+**Example:** ``PassengerContactPolicy.cs``
 
 .. raw:: html
 
@@ -164,7 +164,7 @@ The transition must restore appropriate body, collision and animation ownership.
 
 Choose an application lifetime policy for the detached character: leave it in the world, recover it after a delay, replace it with another representation or return it to a pool. Seating/reset APIs can restore an eligible released occupant, but do not decide multiplayer respawn ownership or erase unrelated world characters.
 
-Ejection releases vehicle restraints, finger binding and pose motors, then activates passive skeletal physics. ``Free``-ragdoll damping and solver settings control settling without a stored seated-pose spring. Previously captured collision/Animator/solver settings are restored on appropriate reattachment/handover.
+Ejection releases vehicle restraints, finger binding and pose motors, then activates passive skeletal physics. Free-ragdoll damping and solver settings control settling without a stored seated-pose spring. Previously captured collision/Animator/solver settings are restored on appropriate reattachment/handover.
 
 The application owns the detached body lifetime. Use :doc:`passenger controllers </Scripting/PassengerControllers>` for animation/application ownership, :doc:`handles </Scripting/Handles>` for limb bindings, and :doc:`grip solving </Scripting/GripSolving>` for contact geometry.
 

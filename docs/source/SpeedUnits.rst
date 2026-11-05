@@ -25,7 +25,7 @@ HUD and instrument outputs
 
 On **DemoHud**, set **Speed Unit** in the Inspector to choose the dashboard readout and its label. The selection remains in effect when switching vehicles. **CarHud → Speed Unit** selects the number and label on the generated cockpit display. A supplied custom dashboard texture remains authored content.
 
-**SpeedValueSource → Speed Unit** selects the instrument value; **Signed** still controls whether reverse motion is negative. Calibrate the receiving needle's range/curve in the selected output unit. The default is Kph for all three components, preserving existing scenes. These output choices are serialized per component, included in builds and independent of the editor authoring preference.
+**SpeedValueSource → Speed Unit** selects the instrument value; **Signed** controls whether reverse motion is negative. Calibrate the receiving needle's range/curve in the selected output unit. The default is Kph for all three components. These output choices are serialized per component, included in builds and independent of the editor authoring preference.
 
 .. _evs-speedunits--code-and-telemetry:
 
@@ -34,7 +34,7 @@ Code and telemetry
 
 ``VehicleController.SpeedKph`` and ``Telemetry.SpeedKph`` keep their km/h contract. Both also expose ``SpeedMph`` and ``GetSpeed(SpeedUnit unit)``. ``DirectionSelectionSpeedMph`` accompanies ``DirectionSelectionSpeedKph`` and uses the same planar speed calculation, excluding suspension bounce. ``ForwardSpeed``, velocity vectors and airspeed retain m/s contracts.
 
-Use ``Settings.TopSpeedMph`` for convenient read/write top-speed tuning in mph. For every other configuration field, convert into its declared storage unit with ``SpeedUnits.Convert``. A field ending in Kph always stores km/h regardless of Inspector preference. Existing m/s fields retain m/s. Changing engine/gearbox setup still follows the normal :doc:`configuration contract </Configuration>`.
+Use ``Settings.TopSpeedMph`` for convenient read/write top-speed tuning in mph. For every other configuration field, convert into its declared storage unit with ``SpeedUnits.Convert``. A field ending in Kph always stores km/h regardless of Inspector preference. Fields expressed in m/s store metres per second. Changing engine/gearbox setup still follows the normal :ref:`configuration contract <evs-configuration--controller-tabs>`.
 
 .. raw:: html
 
@@ -71,4 +71,4 @@ Use ``Settings.TopSpeedMph`` for convenient read/write top-speed tuning in mph. 
        [Speed(minimum: 0)] public float cruiseSpeedKph = 50;
    }
 
-See :doc:`conversion API </API/SpeedUnits>` for the attribute and conversion signatures. Conversion retains negative signs, so the same helper works for signed speed and speed differences.
+See :doc:`conversion API </API/Units>` for the attribute and conversion signatures. Conversion retains negative signs, so the same helper works for signed speed and speed differences.

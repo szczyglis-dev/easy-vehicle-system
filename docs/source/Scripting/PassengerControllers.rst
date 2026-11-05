@@ -12,21 +12,28 @@ This separation lets an application retain its own character framework while usi
 Implementation map
 ------------------
 
-+-------------------------+------------------------------------------------------------------+
-| Class                   | Responsibility                                                   |
-+=========================+==================================================================+
-| ``Passengers``          | Discovers owned seats/handles and schedules passenger work.      |
-+-------------------------+------------------------------------------------------------------+
-| ``PassengerSeat``       | Owns admission, occupancy, reservations and controller handover. |
-+-------------------------+------------------------------------------------------------------+
-| ``PassengerController`` | Defines per-seat attachment, detachment and stepping behavior.   |
-+-------------------------+------------------------------------------------------------------+
-| ``PassengerBody``       | Base character adapter used by seats and controller strategies.  |
-+-------------------------+------------------------------------------------------------------+
-| ``CustomPassengerBody`` | Minimal body for application-owned Custom occupancy.             |
-+-------------------------+------------------------------------------------------------------+
-| ``HumanoidPassenger``   | Connects humanoid rig, pose and physical passenger behavior.     |
-+-------------------------+------------------------------------------------------------------+
++-------------------------+---------------------------------------------------------------------------+
+| Class                   | Responsibility                                                            |
++=========================+===========================================================================+
+| ``CustomPassengerBody`` | Minimal body for application-owned Custom occupancy.                      |
++-------------------------+---------------------------------------------------------------------------+
+| ``HumanoidPassenger``   | Connects humanoid rig, pose and physical passenger behavior.              |
++-------------------------+---------------------------------------------------------------------------+
+| ``PassengerBody``       | Base character adapter used by seats and controller strategies.           |
++-------------------------+---------------------------------------------------------------------------+
+| ``PassengerController`` | Defines per-seat attachment, detachment and stepping behavior.            |
++-------------------------+---------------------------------------------------------------------------+
+| ``Passengers``          | Discovers owned seats and schedules passenger work after vehicle.handles. |
++-------------------------+---------------------------------------------------------------------------+
+| ``PassengerSeat``       | Owns admission, occupancy, reservations and controller handover.          |
++-------------------------+---------------------------------------------------------------------------+
+
+.. _evs-scripting-passengercontrollers--operation-hooks:
+
+Operation hooks
+---------------
+
+Seat and core Before/After notifications carry :ref:`PassengerSeatContext <evs-api-passengercontrollers--passengerseatcontext>`, including Vehicle, Passenger, Seat and release parameters. See :ref:`hook ordering and the collider integration example <evs-passengers--before-and-after-hooks>`. Use seat/core hooks for attachment and detachment; use PassengerAccess hooks when the whole door/motion sequence matters.
 
 .. _evs-scripting-passengercontrollers--seat-versus-character:
 
@@ -70,7 +77,7 @@ For Custom mode, decide explicitly what happens to the character's movement cont
 
 Put ``CustomPassengerBody`` on your character, select Custom on the seat and assign the body below. Call ``Enter``/``Exit`` from the application. The boolean return is immediate occupancy admission, not an animated access completion.
 
-**Example: ``CustomCharacterOccupancy.cs``**
+**Example:** ``CustomCharacterOccupancy.cs``
 
 .. raw:: html
 
@@ -112,7 +119,7 @@ The example calls ``base.Attach`` before recording success. A failed base attach
 
 Use a derived seat when a strategy needs application state while retaining occupancy validation/events. This example counts successful Custom attachments. Its controller extends the public Custom implementation, so it does not call package-internal body helpers.
 
-**Example: ``ApplicationPassengerSeat.cs``**
+**Example:** ``ApplicationPassengerSeat.cs``
 
 .. raw:: html
 
@@ -147,6 +154,64 @@ Use a derived seat when a strategy needs application state while retaining occup
    }
 
 Strategies do not publish seat occupancy events themselves. A complete replacement owns its attachment/cleanup work, while the seat retains admission and event ordering. See :doc:`access </Scripting/PassengerAccess>` for asynchronous boarding and :doc:`physics </Scripting/PassengerPhysics>` for dynamic occupants.
+
+.. _evs-scripting-passengercontrollers--custom-joint-support-api:
+
+Custom joint support API
+------------------------
+
+Seat ``jointSupports`` entries are keyed by the occupant’s Anatomical Joint ID. ``GetJointSupport`` returns live settings; edit their spring, damper, target or caps directly, or use ``UpdateJointSupport``. These changes apply on the next passenger physics step, without rebuilding anatomical joints or re-entering the seat. ``SetJointSupportActive`` pauses one support; ``RemoveJointSupport`` deletes its configuration. An empty seat can be configured before a body enters.
+
+See :ref:`custom joint support setup and example <evs-seats--custom-ragdoll-joint-supports>` for a working knee-target example. ``TryGetJointSupportState`` reports the last calculated force, torque and world points while that support is valid. It returns false when the seat/occupant is unavailable, the entry is inactive, the target or joint cannot be resolved, or no support step has run. The snapshot is a calculated support contribution, not the ragdoll’s total joint load.
+
+IDs use ordinal, case-sensitive matching. The API rejects blank or duplicate IDs. Direct Inspector/list edits remain supported; duplicate seat IDs, duplicate anatomical IDs, missing joints and missing targets are skipped safely. Changing settings does not require a refresh call. The list is empty by default; no additional position constraints are applied until entries are configured.
+
+.. _evs-scripting-passengercontrollers--independent-attachment-api:
+
+Independent attachment API
+--------------------------
+
+Use ``SetAttachmentMode(PassengerAttachmentMode.Parent)`` before entry or during occupancy. Check its boolean result; busy access or incompatible attachment rejects the handover. Spring is the default. The mode does not change the selected controller or turn off a physical ragdoll. Each transform entry separately selects mode = PassengerAttachmentMode.Spring or Parent; springs also simulate plain/kinematic transforms. Parent can optionally make only the held Rigidbody kinematic. Explicit support lists work with every controller, including Custom. Additional bindings use transform references, not anatomical joint IDs; entries authored on Body Prefab resolve on the spawned occupant.
+
+.. raw:: html
+
+   <!-- example: RigidPassengerAttachment.cs -->
+
+.. code-block:: csharp
+
+   using UnityEngine;
+   using EasyVehicleSystem;
+
+   namespace VehicleDocumentationExamples
+   {
+       public class RigidPassengerAttachment : MonoBehaviour
+       {
+           public PassengerSeat seat;
+           public Transform passengerBone;
+           public Transform vehicleAnchor;
+
+           public bool Configure()
+           {
+               if (!seat || !seat.SetAttachmentMode(PassengerAttachmentMode.Parent)) return false;
+               return seat.AddTransformSupport(new PassengerTransformSupport {
+                   id = "passenger.hand",
+                   followAnchorRotation = true,
+                   mode = PassengerAttachmentMode.Parent,
+                   makeKinematic = true,
+                   bodyTransform = passengerBone,
+                   anchor = vehicleAnchor,
+                   positionOffset = new Vector3(0, 0.02f, 0)
+               });
+           }
+
+           public void ReleaseBone()
+           {
+               if (seat) seat.SetTransformSupportActive("passenger.hand", false);
+           }
+       }
+   }
+
+Transform overloads operate on the configured bodyTransform reference; string overloads use the same single ID / Label displayed in the Inspector. Use UpdateTransformSupport("passenger.hand", support => support.followAnchorRotation = false) to capture a fixed world rotation on refresh. See :ref:`the detailed API <evs-api-passengercontrollers--passengerseat>` and :ref:`attachment configuration <evs-seats--main-attachment-and-rigid-transform-supports>`.
 
 .. _evs-scripting-passengercontrollers--complete-public-method-and-event-index:
 
@@ -193,6 +258,21 @@ AttachOnlyPassengerController
 +=========================================================================+=====================================================================================================================+
 | ``public override bool Attach(PassengerBody body, PassengerSeat seat)`` | Attaches a body using this controller/body strategy; successful attachment is separate from seat event publication. |
 +-------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-passengercontrollers--balancerider:
+
+BalanceRider
+~~~~~~~~~~~~
+
+:ref:`BalanceRider <evs-api-passengercontrollers--balancerider>` gives the full declared contract.
+
++---------------------------------------------------------------+-------------------------------------------------------------------------------+
+| Method                                                        | Role                                                                          |
++===============================================================+===============================================================================+
+| ``public override void ResetPassenger(Passengers core)``      | Resets this passenger behavior's state for the supplied seat.                 |
++---------------------------------------------------------------+-------------------------------------------------------------------------------+
+| ``public override bool AppliesTo(VehicleController vehicle)`` | Checks whether this passenger behavior should run for the supplied seat/role. |
++---------------------------------------------------------------+-------------------------------------------------------------------------------+
 
 .. _evs-scripting-passengercontrollers--custompassengerbody:
 
@@ -275,12 +355,24 @@ HumanoidPassenger
 | ``public event System.Action<HumanoidPassenger> AfterSeatedIK``  | Immediately after seated IK work. Payload: ``HumanoidPassenger``.                                                                |
 +------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-passengercontrollers--imodule:
++-----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                                          | Behavior                                                                                                                                                                                |
++=================================================================================================================+=========================================================================================================================================================================================+
+| ``public virtual bool TryGetAnatomicalJointDefinition(string jointId, out HumanoidJointDefinition definition)`` | Returns the unique definition with a live joint for the case-sensitive ID; false/null for empty, missing, duplicate or destroyed entries.                                               |
++-----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TryGetAnatomicalJoint(string jointId, out ConfigurableJoint joint)``                      | Returns true and the native ConfigurableJoint for a unique live ID; otherwise false and null. Lookup allocates no managed memory.                                                       |
++-----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual ConfigurableJoint GetAnatomicalJoint(string jointId)``                                         | Returns the native ConfigurableJoint for a unique live ID, or null when unresolved/ambiguous.                                                                                           |
++-----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool UpdateAnatomicalJoint(string jointId, System.Action<ConfigurableJoint> update)``          | Runs the callback on a uniquely resolved joint, then refreshes its cached anatomy/IK data. False for unresolved ID or null callback. Callback exceptions propagate after cache refresh. |
++-----------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-IModule
-~~~~~~~
+.. _evs-scripting-passengercontrollers--ivehiclemodule:
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+IVehicleModule
+~~~~~~~~~~~~~~
+
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -289,50 +381,6 @@ IModule
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-passengercontrollers--module:
-
-Module
-~~~~~~
-
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
-
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                    | Role                                                                                                                                   |
-+===========================================================================================+========================================================================================================================================+
-| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                          | Role                                                                                                              |
-+===========================================================================+===================================================================================================================+
-| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-passengercontrollers--motorcyclerider:
-
-MotorcycleRider
-~~~~~~~~~~~~~~~
-
-:ref:`MotorcycleRider <evs-api-passengercontrollers--motorcyclerider>` gives the full declared contract.
-
-+---------------------------------------------------------------+-------------------------------------------------------------------------------+
-| Method                                                        | Role                                                                          |
-+===============================================================+===============================================================================+
-| ``public override void ResetPassenger(Passengers core)``      | Resets this passenger behavior's state for the supplied seat.                 |
-+---------------------------------------------------------------+-------------------------------------------------------------------------------+
-| ``public override bool AppliesTo(VehicleController vehicle)`` | Checks whether this passenger behavior should run for the supplied seat/role. |
-+---------------------------------------------------------------+-------------------------------------------------------------------------------+
 
 .. _evs-scripting-passengercontrollers--passengerbehaviour:
 
@@ -416,6 +464,51 @@ PassengerModule
 | ``public virtual void StepPassenger(Passengers core, float deltaTime)``                           | Advances passenger work in the supplied seat/core context.                                                                                        |
 +---------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+
 
+.. _evs-scripting-passengercontrollers--passengers:
+
+Passengers
+~~~~~~~~~~
+
+:ref:`Passengers <evs-api-passengercontrollers--passengers>` gives the full declared contract.
+
++------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| Method                                                                                                     | Role                                                                                                      |
++============================================================================================================+===========================================================================================================+
+| ``public virtual void RefreshPassengers()``                                                                | Rebuilds the owned seat and passenger-behavior snapshot. Handles use vehicle.handles.Refresh().           |
++------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public override void Configure(VehicleController vehicle)``                                              | Rebuilds the owned passenger seats, ordered handles and passenger-local behaviors.                        |
++------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)``                 | Supplies commands to handles in order, then advances passenger modules and seats from the owned snapshot. |
++------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual void PrepareOccupant(PassengerSeat seat)``                                                | Prepares a seat's occupant and its local handles/passenger behaviors.                                     |
++------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual void ResetOccupants()``                                                                   | Resets eligible owned seated/released occupants through their seat lifecycle.                             |
++------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TryEnter(PassengerBody body, PassengerSeat seat = null)``                            | Routes an entry request through an owned seat/passenger selection and that seat's validation.             |
++------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| ``public virtual bool TryExit(PassengerBody body, PassengerExitReason reason = PassengerExitReason.Exit)`` | Requests immediate exit or starts animated departure, depending on the declaring owner.                   |
++------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                                  | Role                                                                                                                                                                     |
++===================================================================================+==========================================================================================================================================================================+
+| ``public event Action<PassengerSeatContext> BeforeEnter``                         | After admission validation, before occupancy assignment and controller attachment. Occupant and Passenger.Seat are still empty. Payload: immutable PassengerSeatContext. |
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> AfterEnter``                          | After successful attachment and existing Entered notifications. Payload: immutable PassengerSeatContext.                                                                 |
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> BeforeExit``                          | While the passenger still owns the seat, before detachment. Includes ordinary exit, ejection, disable and destruction. Payload: immutable PassengerSeatContext.          |
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> AfterExit``                           | After detachment and existing Exited notifications. During ejection this precedes the extra velocity change. Payload: immutable PassengerSeatContext.                    |
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> BeforeEject``                         | Before any ejection detachment, while the seat is still occupied. Payload: immutable PassengerSeatContext.                                                               |
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> AfterEject``                          | After ejected detachment and the requested built-in velocity change. Custom controllers retain their application-owned physics. Payload: immutable PassengerSeatContext. |
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeat, PassengerBody> Entered``                     | After accepted seat occupancy. Payload identifies the occupant; the Passengers-core delegate also includes the seat.                                                     |
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeat, PassengerBody, PassengerExitReason> Exited`` | After occupancy is released. Payload identifies occupant and ``PassengerExitReason``; the core delegate also includes the seat.                                          |
++-----------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
 .. _evs-scripting-passengercontrollers--passengerseat:
 
 PassengerSeat
@@ -457,50 +550,69 @@ PassengerSeat
 | ``public virtual bool TryExit(PassengerExitReason reason = PassengerExitReason.Exit, bool preservePose = false)`` | Releases current occupancy through its active strategy and exit reason; it does not run an animated access sequence.                                        |
 +-------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-+------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                                                           | Role                                                                                                                                         |
-+============================================================================================================+==============================================================================================================================================+
-| ``public event Action<PassengerSeat, PassengerControllerType, PassengerControllerType> ControllerChanged`` | After a successful seat strategy handover. Payload: seat, previous controller type, new controller type; no extra entry/exit is synthesized. |
-+------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<PassengerBody> Entered``                                                             | After accepted seat occupancy. Payload identifies the occupant; the Passengers-core delegate also includes the seat.                         |
-+------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<PassengerBody> ResetRequested``                                                      | When Custom occupancy receives a reset request. Payload: ``PassengerBody``; application owns the actual custom-character reset.              |
-+------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<PassengerBody, PassengerExitReason> Exited``                                         | After occupancy is released. Payload identifies occupant and ``PassengerExitReason``; the core delegate also includes the seat.              |
-+------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                                                           | Role                                                                                                                                                                     |
++============================================================================================================+==========================================================================================================================================================================+
+| ``public event Action<PassengerSeatContext> BeforeEnter``                                                  | After admission validation, before occupancy assignment and controller attachment. Occupant and Passenger.Seat are still empty. Payload: immutable PassengerSeatContext. |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> AfterEnter``                                                   | After successful attachment and existing Entered notifications. Payload: immutable PassengerSeatContext.                                                                 |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> BeforeExit``                                                   | While the passenger still owns the seat, before detachment. Includes ordinary exit, ejection, disable and destruction. Payload: immutable PassengerSeatContext.          |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> AfterExit``                                                    | After detachment and existing Exited notifications. During ejection this precedes the extra velocity change. Payload: immutable PassengerSeatContext.                    |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> BeforeEject``                                                  | Before any ejection detachment, while the seat is still occupied. Payload: immutable PassengerSeatContext.                                                               |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeatContext> AfterEject``                                                   | After ejected detachment and the requested built-in velocity change. Custom controllers retain their application-owned physics. Payload: immutable PassengerSeatContext. |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerSeat, PassengerControllerType, PassengerControllerType> ControllerChanged`` | After a successful seat strategy handover. Payload: seat, previous controller type, new controller type; no extra entry/exit is synthesized.                             |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerBody> Entered``                                                             | After accepted seat occupancy. Payload identifies the occupant; the Passengers-core delegate also includes the seat.                                                     |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerBody> ResetRequested``                                                      | When Custom occupancy receives a reset request. Payload: ``PassengerBody``; application owns the actual custom-character reset.                                          |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event Action<PassengerBody, PassengerExitReason> Exited``                                         | After occupancy is released. Payload identifies occupant and ``PassengerExitReason``; the core delegate also includes the seat.                                          |
++------------------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-passengercontrollers--passengers:
+-  **PassengerSeat** — ``public virtual bool AddJointSupport(PassengerJointSupport support)``
+-  **PassengerSeat** — ``public virtual PassengerJointSupport GetJointSupport(string jointId)``
+-  **PassengerSeat** — ``public virtual bool RemoveJointSupport(string jointId)``
+-  **PassengerSeat** — ``public virtual bool SetJointSupportActive(string jointId, bool active)``
+-  **PassengerSeat** — ``public virtual bool TryGetJointSupport(string jointId, out PassengerJointSupport support)``
+-  **PassengerSeat** — ``public virtual bool TryGetJointSupportState(string jointId, out PassengerJointSupportState state)``
+-  **PassengerSeat** — ``public virtual bool UpdateJointSupport(string jointId, Action<PassengerJointSupport> update)``
 
-Passengers
-~~~~~~~~~~
++-------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------+
+| Signature                                                                                                         | Role                                                   |
++===================================================================================================================+========================================================+
+| ``public virtual bool SetAttachmentMode(PassengerAttachmentMode mode)``                                           | Change main attachment while retaining occupancy.      |
++-------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------+
+| ``public virtual void RefreshTransformSupports()``                                                                | Rebuild bindings after direct list/settings edits.     |
++-------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------+
+| ``public virtual bool AddTransformSupport(PassengerTransformSupport support)``                                    | Add a unique configuration and refresh.                |
++-------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------+
+| ``public virtual PassengerTransformSupport GetTransformSupport(Transform bodyTransform)``                         | Look up a unique live configuration.                   |
++-------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------+
+| ``public virtual bool RemoveTransformSupport(Transform bodyTransform)``                                           | Remove matching configurations and refresh.            |
++-------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------+
+| ``public virtual bool SetTransformSupportActive(Transform bodyTransform, bool active)``                           | Toggle and refresh one unique configuration.           |
++-------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------+
+| ``public virtual bool UpdateTransformSupport(Transform bodyTransform, Action<PassengerTransformSupport> update)`` | Edit settings and refresh even if the callback throws. |
++-------------------------------------------------------------------------------------------------------------------+--------------------------------------------------------+
 
-:ref:`Passengers <evs-api-passengercontrollers--passengers>` gives the full declared contract.
-
-+------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| Method                                                                                                     | Role                                                                                                      |
-+============================================================================================================+===========================================================================================================+
-| ``public virtual void RefreshPassengers()``                                                                | Rebuilds the owned seat, handle and passenger-behavior snapshot.                                          |
-+------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public override void Configure(VehicleController vehicle)``                                              | Rebuilds the owned passenger seats, ordered handles and passenger-local behaviors.                        |
-+------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)``                 | Supplies commands to handles in order, then advances passenger modules and seats from the owned snapshot. |
-+------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void PrepareOccupant(PassengerSeat seat)``                                                | Prepares a seat's occupant and its local handles/passenger behaviors.                                     |
-+------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual void ResetOccupants()``                                                                   | Resets eligible owned seated/released occupants through their seat lifecycle.                             |
-+------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual bool TryEnter(PassengerBody body, PassengerSeat seat = null)``                            | Routes an entry request through an owned seat/passenger selection and that seat's validation.             |
-+------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| ``public virtual bool TryExit(PassengerBody body, PassengerExitReason reason = PassengerExitReason.Exit)`` | Requests immediate exit or starts animated departure, depending on the declaring owner.                   |
-+------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-
-+-----------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                                  | Role                                                                                                                            |
-+===================================================================================+=================================================================================================================================+
-| ``public event Action<PassengerSeat, PassengerBody> Entered``                     | After accepted seat occupancy. Payload identifies the occupant; the Passengers-core delegate also includes the seat.            |
-+-----------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
-| ``public event Action<PassengerSeat, PassengerBody, PassengerExitReason> Exited`` | After occupancy is released. Payload identifies occupant and ``PassengerExitReason``; the core delegate also includes the seat. |
-+-----------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
++-----------------------------------------------------------------------------------------------------+-------------------------------------------------------------------+
+| Signature                                                                                           | Role                                                              |
++=====================================================================================================+===================================================================+
+| ``public virtual bool TryGetTransformSupport(string id, out PassengerTransformSupport support)``    | Resolve a unique ID; false for blank, missing or ambiguous names. |
++-----------------------------------------------------------------------------------------------------+-------------------------------------------------------------------+
+| ``public virtual PassengerTransformSupport GetTransformSupport(string id)``                         | Read live settings by ID / Label.                                 |
++-----------------------------------------------------------------------------------------------------+-------------------------------------------------------------------+
+| ``public virtual bool SetTransformSupportActive(string id, bool active)``                           | Toggle and refresh a binding by ID.                               |
++-----------------------------------------------------------------------------------------------------+-------------------------------------------------------------------+
+| ``public virtual bool UpdateTransformSupport(string id, Action<PassengerTransformSupport> update)`` | Update and refresh settings by ID.                                |
++-----------------------------------------------------------------------------------------------------+-------------------------------------------------------------------+
+| ``public virtual bool RemoveTransformSupport(string id)``                                           | Remove and refresh a unique binding by ID.                        |
++-----------------------------------------------------------------------------------------------------+-------------------------------------------------------------------+
 
 .. _evs-scripting-passengercontrollers--ragdollphysicspassengercontroller:
 
@@ -516,3 +628,32 @@ RagdollPhysicsPassengerController
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
 | ``public override void Step(PassengerBody body, Passengers core, float deltaTime)`` | Calls the admitted body's ``StepSeated`` through the physical passenger path.                                       |
 +-------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-passengercontrollers--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                    | Role                                                                                                                                   |
++===========================================================================================+========================================================================================================================================+
+| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                          | Role                                                                                                              |
++===========================================================================+===================================================================================================================+
+| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+

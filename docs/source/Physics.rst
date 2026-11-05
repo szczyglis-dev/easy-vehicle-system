@@ -7,6 +7,17 @@ Easy Vehicle System combines Unity physics with configurable vehicle mechanics. 
 
 Start with correct geometry and a stable chassis, then tune suspension, propulsion, steering and assists in that order. Effects and visible suspension parts should follow the resulting motion.
 
+.. _evs-physics--inspector-quick-start-a-basic-driving-chassis:
+
+Inspector quick start: a basic driving chassis
+----------------------------------------------
+
+1. Select the root with Vehicle Controller. In **Setup**, choose the drive mode and configure mass/centre of mass in the vehicle settings. Fit permanent chassis colliders on this root's Rigidbody hierarchy.
+2. In **Wheels > Wheel Setup**, add each WheelCollider and visual, set radius/width/mass and its drive, steering, service-brake and handbrake roles. Apply configuration and establish support using :ref:`Suspension <evs-suspension--inspector-quick-start>`.
+3. In **Modules > Engine > Engine**, configure running state, RPM and power/torque for the profile. Add/connect a :ref:`gearbox <evs-gearbox--inspector-quick-start>` when selectable gearing is wanted. Profile-managed fields are edited at the owning profile, as indicated by their tooltips.
+4. Open **Modules > Drive > Brakes** for service/handbrake behavior and **Steering** for steering/handling assistance. Check baseline vehicle steering/braking values under Setup too; the configured wheel roles decide which contacts receive them.
+5. Open **Modules > Physics > Friction** for tire grip, then add optional contact/stability helpers only after the basic chassis works. Apply/save and test launch, braking and a turn on a simple flat collider before adding effects.
+
 .. _evs-physics--chassis-coordinates-and-units:
 
 Chassis, coordinates and units
@@ -14,25 +25,25 @@ Chassis, coordinates and units
 
 Keep the vehicle root at unit scale, with local +Z forward and +Y up. Put model-specific scaling and orientation corrections on visual children. Body colliders define the chassis shape for impacts; wheel contacts provide tire support separately.
 
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| Setting or property                                             | Purpose                                                                                                         |
-+=================================================================+=================================================================================================================+
-| ``VehicleController.Body``                                      | The vehicle's physical ``Rigidbody``; use it to read velocity or apply additional forces from custom mechanics. |
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``VehicleController.settings.mass``                             | Chassis mass in kilograms. Configuration applies a minimum of 100 kg.                                           |
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``VehicleController.settings.centerOfMass``                     | Explicit local center of mass relative to the vehicle root, in metres.                                          |
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``VehicleController.wheelSetup``                                | Authored wheel geometry, references, roles and multipliers.                                                     |
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``VehicleController.Wheels``                                    | Runtime wheel adapters for the configured vehicle.                                                              |
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``VehicleController.SpeedKph`` / ``VehicleController.SpeedMph`` | Speed magnitude in km/h or mph, including lateral and vertical motion.                                          |
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``VehicleController.ForwardSpeed``                              | Signed velocity along the vehicle's forward axis, in m/s.                                                       |
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
-| ``VehicleController.GetSpeed(SpeedUnit unit)``                  | Speed magnitude in the requested unit.                                                                          |
-+-----------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------+
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| Setting or property                                             | Purpose                                                                                                                      |
++=================================================================+==============================================================================================================================+
+| ``VehicleController.Body``                                      | The vehicle's physical ``Rigidbody``; use it to read velocity or apply additional forces from custom mechanics.              |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``VehicleController.settings.mass``                             | Chassis mass in kilograms. Configuration applies a minimum of 100 kg.                                                        |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``VehicleController.settings.centerOfMass``                     | Explicit local center of mass relative to the vehicle root, in metres.                                                       |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``VehicleController.wheelSetup``                                | Wheel geometry, references, roles and multipliers.                                                                           |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``VehicleController.Wheels``                                    | Runtime wheel adapters for the configured vehicle.                                                                           |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``VehicleController.SpeedKph`` / ``VehicleController.SpeedMph`` | Speed magnitude in km/h or mph, including lateral and vertical motion.                                                       |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``VehicleController.ForwardSpeed``                              | Signed velocity along the configured drive direction, in m/s; positive means forward even when engine direction is inverted. |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| ``VehicleController.GetSpeed(SpeedUnit unit)``                  | Speed magnitude in the requested unit.                                                                                       |
++-----------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
 
 Distances and suspension travel use metres, forces use newtons, and torque uses N·m. Speed fields with a unit selector can be authored in km/h, mph or m/s; changing the displayed unit preserves the physical value. See :doc:`Speed units </SpeedUnits>`.
 
@@ -99,6 +110,8 @@ With a gearbox, engine torque and RPM, gear ratios, drivetrain efficiency and co
 
 ``Brakes`` applies braking through the configured wheel roles and multipliers. ``settings.brakeTorque`` controls the service-brake torque budget. Set up service brakes and handbrakes deliberately, especially for vehicles with several axles.
 
+The drive profile's **Steering Speed Limit Enabled** switch is shared by every vehicle type. It gates the Steering module's speed-sensitive angle reduction and speed/grip lateral-acceleration cap. It defaults to enabled for existing non-aircraft behavior and disabled for fixed-wing aircraft. Turning it off retains minimum turning radius, Ackermann geometry and steering smoothing. With it enabled, the module's existing options and analog-input policy still apply.
+
 ``Steering`` drives the configured steering wheels using ``settings.steeringAngle``, steering response and per-wheel multipliers. ``Steering.speedSensitiveSteering`` can reduce steering authority with speed; ``Steering.advancedSteeringGeometry`` enables the optional radius/grip limits and Ackermann geometry. Negative per-wheel steering multipliers support counter-steering axles.
 
 Tune the visible steering-wheel travel separately from road-wheel angles. See :doc:`Vehicle tuning </VehicleTuning>`, :doc:`Gearbox </Gearbox>`, :doc:`Clutch </Clutch>` and :doc:`Drive dynamics </Scripting/DriveDynamics>`.
@@ -114,6 +127,22 @@ The active ``DriveProfile`` determines the vehicle's movement model. Hover, airc
 
 These systems are intended for configurable game handling. Motorcycle balance, hover support, aerodynamics and buoyancy are assisted gameplay models rather than engineering simulations.
 
+.. _evs-physics--collisions-and-stabilization:
+
+Collisions and stabilization
+----------------------------
+
+Use ``Stabilization`` to damp excessive spin during jumps and tumbling, and ``Collisions`` to supplement native crash rebound and body sliding friction. Optional **Auto Righting** is disabled by default and applies a bounded recovery torque while a slow vehicle on its side touches the ground; roof recovery is excluded. See :doc:`Collisions and stabilization </CollisionsAndStabilization>`.
+
+.. _evs-physics--reverse-longitudinal-propulsion:
+
+Reverse longitudinal propulsion
+-------------------------------
+
+Enable **Invert Drive Direction** on ``Engine`` when positive throttle must propel the vehicle toward local -Z. ``Engine.invertDriveDirection`` reverses wheel torque and built-in longitudinal thrust while keeping forward/reverse gear selection and throttle magnitude unchanged. Braking and direction selection use the configured direction through ``VehicleController.ForwardSpeed``.
+
+``Engine.DriveDirectionSign`` and ``VehicleController.DriveDirectionSign`` return -1 when inverted and +1 otherwise. Custom drive profiles can multiply longitudinal force by the vehicle's sign. The switch does not rotate meshes, colliders, steering axes or aerodynamic control frames; keep those aligned with the intended handling setup. Leave it disabled on the supplied Car, whose FBX already faces +Z.
+
 .. _evs-physics--apply-and-inspect-changes:
 
 Apply and inspect changes
@@ -126,16 +155,3 @@ Apply and inspect changes
 5. Save persistent changes outside Play Mode and check a fresh instance of the vehicle.
 
 When tuning high-speed collisions or many articulated bodies, review Unity's fixed timestep, collision-detection mode and solver settings for your scene. Smaller timesteps and more solver work cost CPU time; choose settings using the target platform and expected vehicle count. See :doc:`Performance </Performance>` and :doc:`Troubleshooting </Troubleshooting>`.
-
-.. _evs-physics--physical-limits-and-reset-behavior:
-
-Physical limits and reset behavior
-----------------------------------
-
--  The package does not simulate tire temperature or wear, full drivetrain elasticity, synchronizer mechanics, engine stalling or clutch heat/wear.
--  Physical passengers and detachable parts use native bodies and joints. Their configured force limits and reachable anchors determine when they yield or release.
--  Mesh deformation affects supported readable visual meshes. It does not continuously reshape collision proxies or skinned meshes.
--  Tire marks are bounded contact ribbons, with the limitations described in their setup guide.
--  ``VehicleController.Teleport(position, rotation)`` repositions the vehicle; it does not repair dents, replace detached parts or rearm weapons. Supply the repair or respawn policy your game needs.
-
-See :doc:`Damage </Damage>`, :doc:`Passengers </Passengers>` and :doc:`Scripting </Scripting>` for integration with your gameplay.

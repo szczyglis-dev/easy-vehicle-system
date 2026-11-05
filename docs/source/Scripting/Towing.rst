@@ -31,7 +31,7 @@ Constraint and collision ownership
 
 ``Trailer`` is the command-following half of towing. It reads the connection's resolved service/handbrake state according to configured follow switches and multiplier. It does not become the towing engine. Detached parking is another explicit policy, useful for a trailer that should not roll away when uncoupled.
 
-The trailer remains its own body with its own wheel definitions and support. ``Configure`` its mass, wheel brakes and hitch anchor as a complete vehicle before connecting it. A correct coupler cannot compensate for wheels belonging to the wrong rigidbody or a trailer with no useful braking/support setup.
+The trailer remains its own body with its own wheel definitions and support. Configure its mass, wheel brakes and hitch anchor as a complete vehicle before connecting it. A correct coupler cannot compensate for wheels belonging to the wrong rigidbody or a trailer with no useful braking/support setup.
 
 For a custom brake-following rule, replace the trailer-side behavior while retaining the coupler's relationship and cleanup contract. For another hitch constraint, replace the coupler's constraint implementation while leaving application candidate selection outside it. Observe ``ConnectionBroken`` to handle unexpected native joint loss as well as deliberate detachment.
 
@@ -39,11 +39,11 @@ Author each hitch anchor in its body's local frame. Incorrect anchor placement p
 
 ``attachmentAlignmentTime`` spreads closure of an accepted gap over time. It is not a scene-wide trailer teleport or a substitute for selecting a nearby candidate. Native breaking thresholds and explicit detachment are separate exit paths, but both must end the relationship and release only its owned resources.
 
-Brake following is also distinct from propulsion. ``Configure`` ``followServiceBrake``, ``followHandbrake`` and ``parkWhenDetached`` for the intended trailer. Long trains involve several independent bodies and controllers, so the application remains responsible for stable mass ratios, hitch geometry and timestep choices.
+Brake following is also distinct from propulsion. Configure ``followServiceBrake``, ``followHandbrake`` and ``parkWhenDetached`` for the intended trailer. Long trains involve several independent bodies and controllers, so the application remains responsible for stable mass ratios, hitch geometry and timestep choices.
 
 The joint locks lateral/vertical translation, permits yaw and bounds pitch/roll. A longitudinal spring/damper carries drawbar load; ``attachmentAlignmentTime`` closes the accepted gap progressively. Breaking policy controls native break thresholds independently of explicit ``Detach``.
 
-``Collision`` suppression covers colliders owned by both connected bodies. ``Detach``/break restores only pairs changed by this connection. The application should not rely on vehicle teleport to reproduce coupling state.
+Collision suppression covers colliders owned by both connected bodies. ``Detach``/break restores only pairs changed by this connection. The application should not rely on vehicle teleport to reproduce coupling state.
 
 ``Trailer`` forwards resolved service/handbrake requests according to its switches/multiplier, clears propulsion, and can park when detached. A train chains those relationships; fixed-step observation between independent controllers can be one tick apart.
 
@@ -58,7 +58,7 @@ Subscribe to relationship events when camera, UI or mission rules depend on coup
 
 Attach this to a hitch interaction object. Assign a coupler and nearby trailer, then call ``Attach`` or ``Detach`` from UI/proximity logic. The example does not search the scene or move a distant trailer.
 
-**Example: ``TrailerInteraction.cs``**
+**Example:** ``TrailerInteraction.cs``
 
 .. raw:: html
 
@@ -113,12 +113,12 @@ Coupler
 | ``public event Action<Trailer> Detached`` | After explicit detachment/cleanup of this hitch relationship. Payload: the formerly connected Trailer. |
 +-------------------------------------------+--------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-towing--imodule:
+.. _evs-scripting-towing--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -128,12 +128,31 @@ IModule
 | ``void Step(VehicleController vehicle, Command command, float deltaTime)`` | Contract for one owner-supplied fixed tick; implement only the module responsibility and use the supplied Command/timestep. |
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-towing--module:
+.. _evs-scripting-towing--trailer:
 
-Module
-~~~~~~
+Trailer
+~~~~~~~
 
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
+:ref:`Trailer <evs-api-towing--trailer>` gives the full declared contract.
+
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+| Method                                                                                     | Role                                                                                                      |
++============================================================================================+===========================================================================================================+
+| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Forwards configured towing brake requests, clears trailer propulsion and applies detached-parking policy. |
++--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
+
++------------------------------------------+----------------------------------------------------------------+
+| Event / callback                         | Role                                                           |
++==========================================+================================================================+
+| ``public event Action ConnectionBroken`` | When a trailer's active hitch relationship breaks. No payload. |
++------------------------------------------+----------------------------------------------------------------+
+
+.. _evs-scripting-towing--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
 
 +-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                                    | Role                                                                                                                                   |
@@ -156,22 +175,3 @@ Module
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 | ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
 +---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-towing--trailer:
-
-Trailer
-~~~~~~~
-
-:ref:`Trailer <evs-api-towing--trailer>` gives the full declared contract.
-
-+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-| Method                                                                                     | Role                                                                                                      |
-+============================================================================================+===========================================================================================================+
-| ``public override void Step(VehicleController vehicle, Command command, float deltaTime)`` | Forwards configured towing brake requests, clears trailer propulsion and applies detached-parking policy. |
-+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------+
-
-+------------------------------------------+----------------------------------------------------------------+
-| Event / callback                         | Role                                                           |
-+==========================================+================================================================+
-| ``public event Action ConnectionBroken`` | When a trailer's active hitch relationship breaks. No payload. |
-+------------------------------------------+----------------------------------------------------------------+

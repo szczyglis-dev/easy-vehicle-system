@@ -3,15 +3,211 @@
 Camera integration API
 ======================
 
-This reference lists public members declared by each package type. Base-type links identify inherited contracts; the topic's method index also includes the relevant package base methods. Unity framework methods inherited from ``MonoBehaviour``, ``Object`` or ``ScriptableObject`` are documented by Unity.
+See :doc:`Cameras </Cameras>` for authoring and runtime handover. Camera submodules inherit the standard :doc:`module API </API/Modules>`.
 
 .. _evs-api-camera--types:
 
 Types
 -----
 
+-  :ref:`CameraModule <evs-api-camera--cameramodule>`
+-  :ref:`Cameras <evs-api-camera--cameras>`
+-  :ref:`Cameras.ViewMode <evs-api-camera--camerasviewmode>`
+-  :ref:`InteriorCamera <evs-api-camera--interiorcamera>`
 -  :ref:`OrbitCamera <evs-api-camera--orbitcamera>`
--  :ref:`OrbitCamera.ViewMode <evs-api-camera--orbitcameraviewmode>`
+
+.. _evs-api-camera--cameramodule:
+
+CameraModule
+------------
+
+**Runtime/World/Camera/CameraModule.cs**
+
+Base class for a Cameras submodule. Cameras renders its selected enabled submodule once per frame.
+
+**Inherits / implements:** ``WorldModule``.
+
+.. _evs-api-camera--state-and-configuration:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                       | Meaning                                                                                                                                                   |
++==============================================+===========================================================================================================================================================+
+| ``public bool active``                       | Active checkbox, initially false. The selected view must be explicitly activated after assignment before it can control a camera.                         |
++----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Transform anchor``                  | Position and rotation reference assigned in the Inspector. Null uses this component's transform; no object-name lookup.                                   |
++----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual Transform Anchor { get; }`` | Resolved anchor, falling back to this transform.                                                                                                          |
++----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool IsActive { get; }``    | This submodule's activation flag combined with its component enabled state. The owning core must also select it and hold an assigned camera to render it. |
++----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool requirePointerLock``           | Requires a locked cursor for mouse look. Scroll zoom remains available while focused. The game owns cursor locking.                                       |
++----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public float sensitivity``                 | Degrees of look rotation per mouse-delta unit.                                                                                                            |
++----------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-camera--methods:
+
+Methods
+~~~~~~~
+
++------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| Signature                                                                                            | Role and behavior                                                                                                                                              | Arguments and result |
++======================================================================================================+================================================================================================================================================================+======================+
+| ``public abstract void RenderCamera(Camera view, Vector2 lookDelta, float scroll, float deltaTime)`` | Places the supplied camera using mouse delta, normalized scroll input and elapsed seconds. Called by Cameras; override it to implement a custom camera module. | —                    |
++------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public abstract void ResetView()``                                                                 | Resets look to its authored starting orientation. Cameras also places the attached camera immediately when controls and the selected submodule are enabled.    | —                    |
++------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetActive(bool value)``                                                        | Sets the activation flag and synchronizes the owning Cameras core immediately. Deactivation stops placement and restores the lens.                             | —                    |
++------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetAnchor(Transform value)``                                                   | Assigns the explicit anchor. Use Cameras.ResetView to restart the view from its authored angles.                                                               | —                    |
++------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+
+.. _evs-api-camera--cameras:
+
+Cameras
+-------
+
+**Runtime/World/Camera/Cameras.cs**
+
+Optional vehicle camera owner. It moves an explicitly assigned camera only while the selected submodule is Active. It releases ownership when inactive, detached or disabled.
+
+**Inherits / implements:** ``WorldModule``.
+
+.. _evs-api-camera--events-and-inspector-callbacks:
+
+Events and Inspector callbacks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                               | Meaning                                                                                                                                               |
++======================================================+=======================================================================================================================================================+
+| ``public event System.Action<Camera> CameraChanged`` | After Attach changes the assigned camera or Detach releases it; payload is the new camera or null. Inspector field edits do not raise this API event. |
++------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<ViewMode> ModeChanged`` | After SetView or Attach changes the view; payload is the new mode.                                                                                    |
++------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-camera--state-and-configuration-1:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Member                                                                     | Meaning                                                                                                                                                                              |
++============================================================================+======================================================================================================================================================================================+
+| ``public virtual CameraModule ActiveModule { get; }``                      | Submodule selected by mode; Custom uses customModule only if it belongs to this GameObject.                                                                                          |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual System.Func<Vector2, bool> CanReadPointer { get; set; }`` | Optional screen-position filter. Return false to suppress mouse look and zoom over UI.                                                                                               |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public CameraModule customModule``                                       | Co-located custom submodule used when mode is Custom. Assign a subclass of CameraModule, such as the Demo free-camera examples.                                                      |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool enableControls``                                             | Enables input processing. Use SetControlsEnabled(false) to clear pending controls immediately.                                                                                       |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual InteriorCamera Interior { get; }``                        | Co-located interior submodule.                                                                                                                                                       |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool IsActive { get; }``                                  | True when the core owns its assigned camera and its selected view, component and controls are all active.                                                                            |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool IsAttached { get; }``                                | True when the core component is enabled and has an assigned camera, including inactive assignments. Use IsActive for actual control.                                                 |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public ViewMode mode``                                                   | Selected Orbit, Interior or Custom view.                                                                                                                                             |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual OrbitCamera Orbit { get; }``                              | Co-located orbit submodule.                                                                                                                                                          |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public bool readMouseInput``                                             | Allows mouse sampling; disable it when driving look/zoom through the API.                                                                                                            |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsDirectControl { get; }``                    | Opts into direct-mode stepping; keeps camera control available.                                                                                                                      |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public override bool SupportsReleasedForces { get; }``                   | Keeps passive maintenance/observation active during release; Drive and Engine suppress force output, and TireCollision keeps native solid proxies without supplemental tread forces. |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ``public Camera viewCamera``                                               | Explicit camera to control. Null leaves the component idle; no Camera.main lookup or camera creation.                                                                                |
++----------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-camera--methods-1:
+
+Methods
+~~~~~~~
+
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| Signature                                                                                      | Role and behavior                                                                                                                                                                                                                                                                      | Arguments and result |
++================================================================================================+========================================================================================================================================================================================================================================================================================+======================+
+| ``public virtual void Attach(Camera value, CameraModule module, bool snap = true)``            | Assigns a camera and selects a co-located built-in or custom submodule without changing its Active flag. snap resets its view. An unrelated or null module throws ArgumentException before attachment changes.                                                                         | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void Attach(Camera value, ViewMode view = ViewMode.Orbit, bool snap = true)`` | Assigns a camera and selects a view without activating it. Inactive assignments do not take camera ownership. Activating an assigned view deactivates the previous owner's selected view, preserving that owner's assignment. snap resets look; a disabled core stores the assignment. | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual Camera Detach()``                                                             | Releases the camera, restores its original field of view and near clip, clears the assignment and returns the former camera. It does not destroy or disable the camera.                                                                                                                | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void ResetView()``                                                            | Resets look to its authored starting orientation. Cameras also places the attached camera immediately when controls and the selected submodule are enabled.                                                                                                                            | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetActive(bool value)``                                                  | Activates/deactivates the currently selected submodule through its SetActive method.                                                                                                                                                                                                   | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetControlsEnabled(bool value)``                                         | Pauses or resumes camera placement and mouse input. Restores the original lens while paused.                                                                                                                                                                                           | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public override void SetEnabled(bool value)``                                                | Enables/disables the core, releasing camera ownership and restoring its lens while disabled. Keeps the assignment for re-enabling.                                                                                                                                                     | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetModule(CameraModule module, bool snap = true)``                       | Selects a co-located module. Orbit/Interior map to their built-in modes; other subclasses select Custom. Invalid/null references throw ArgumentException.                                                                                                                              | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetView(ViewMode value, bool snap = true)``                              | Selects Orbit, Interior or Custom without activating a view. Optionally resets look; invalid enum values throw ArgumentOutOfRangeException.                                                                                                                                            | —                    |
++------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+
+.. _evs-api-camera--camerasviewmode:
+
+Cameras.ViewMode
+----------------
+
+**Runtime/World/Camera/Cameras.cs**
+
+Selects the vehicle view controlled by Cameras.
+
+Values: ``Orbit``, ``Interior``, ``Custom``.
+
+.. _evs-api-camera--interiorcamera:
+
+InteriorCamera
+--------------
+
+**Runtime/World/Camera/InteriorCamera.cs**
+
+Exact cabin-anchor follow with bounded mouse look and configurable camera lens.
+
+**Inherits / implements:** ``CameraModule``.
+
+.. _evs-api-camera--state-and-configuration-2:
+
+State and configuration
+~~~~~~~~~~~~~~~~~~~~~~~
+
++-----------------------------------+-------------------------------------------------------------------------------------------------------------+
+| Member                            | Meaning                                                                                                     |
++===================================+=============================================================================================================+
+| ``public float fieldOfView``      | Vertical field of view in degrees while interior is active. The core restores the previous lens on release. |
++-----------------------------------+-------------------------------------------------------------------------------------------------------------+
+| ``public float nearClipPlane``    | Near clipping distance in metres while the interior view is active. Default: ``0.04``.                      |
++-----------------------------------+-------------------------------------------------------------------------------------------------------------+
+| ``public Vector2 pitchLimits``    | Minimum and maximum pitch in degrees.                                                                       |
++-----------------------------------+-------------------------------------------------------------------------------------------------------------+
+| ``public Vector3 positionOffset`` | Local position offset from the cabin anchor.                                                                |
++-----------------------------------+-------------------------------------------------------------------------------------------------------------+
+| ``public Vector3 rotationOffset`` | Euler rotation offset in degrees relative to the cabin anchor.                                              |
++-----------------------------------+-------------------------------------------------------------------------------------------------------------+
+| ``public Vector2 yawLimits``      | Minimum and maximum cabin yaw in degrees.                                                                   |
++-----------------------------------+-------------------------------------------------------------------------------------------------------------+
+
+.. _evs-api-camera--methods-2:
+
+Methods
+~~~~~~~
+
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| Signature                                                                                            | Role and behavior                                                                                                                                                                  | Arguments and result |
++======================================================================================================+====================================================================================================================================================================================+======================+
+| ``public override void RenderCamera(Camera view, Vector2 lookDelta, float scroll, float deltaTime)`` | Places the supplied camera using mouse delta, normalized scroll input and elapsed seconds. Called by Cameras; override it to implement a custom camera module.                     | —                    |
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public override void ResetView()``                                                                 | Resets look to its authored starting orientation. Cameras also places the attached camera immediately when controls and the selected submodule are enabled.                        | —                    |
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetLook(float yawDegrees, float pitchDegrees)``                                | Sets yaw and pitch in degrees, clamped to the configured pitch/yaw limits. Orbit yaw is a world heading; interior yaw is an anchor-relative offset. Non-finite inputs are ignored. | —                    |
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
 
 .. _evs-api-camera--orbitcamera:
 
@@ -20,119 +216,58 @@ OrbitCamera
 
 **Runtime/World/Camera/OrbitCamera.cs**
 
-Configuration/implementation type for orbit camera within camera integration.
+Mouse orbit, scroll zoom, smoothed framing and obstruction avoidance around an explicit anchor.
 
-**Inherits / implements:** ``MonoBehaviour``.
+**Inherits / implements:** ``CameraModule``.
 
-.. _evs-api-camera--methods:
-
-Methods
-~~~~~~~
-
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Signature                                                                                                           | Role and behavior                                                                                           | Arguments and result                                                                                                                                                                                                              |
-+=====================================================================================================================+=============================================================================================================+===================================================================================================================================================================================================================================+
-| ``public virtual void CycleMode()``                                                                                 | Moves the orbit camera to the next configured camera mode.                                                  | No arguments; no returned value.                                                                                                                                                                                                  |
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetMode(ViewMode value)``                                                                     | Changes transmission or camera mode through the declaring component's transition rules.                     | ``value`` — Requested state/value in this operation's domain; use its configured range/unit.                                                                                                                                      |
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetInteriorLook(float yawDegrees, float pitchDegrees)``                                       | Changes camera look offsets while using the interior view.                                                  | ``yawDegrees`` — Yaw degrees, interpreted by this operation in the declared type. ``pitchDegrees`` — Pitch degrees, interpreted by this operation in the declared type.                                                           |
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Zoom(float amount)``                                                                          | Applies camera zoom input within the selected mode's limits.                                                | ``amount`` — Requested damage/repair amount in the mechanic's damage units.                                                                                                                                                       |
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool CanCaptureAt(Vector2 position)``                                                              | Checks whether a pointer location may be captured for camera control, including subscribed capture filters. | ``position`` — Requested point or switch detent; see its declared type and owning operation. **Returns:** ``true`` when the described condition holds; ``false`` otherwise.                                                       |
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetTarget(Transform value, bool snap = true)``                                                | Changes the orbit camera's followed transform and its view reset policy.                                    | ``value`` — Requested state/value in this operation's domain; use its configured range/unit. ``snap`` — Whether to synchronize immediately instead of preserving travel. Default: ``true``.                                       |
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool TryCaptureStartupCursor()``                                                                   | Attempts cursor capture using the camera's startup policy.                                                  | **Returns:** ``true`` if admitted/applied; inspect the described completion boundary and any out values.                                                                                                                          |
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void MoveFreeLook(Vector3 localMovement, Vector2 lookDelta, float deltaTime, bool boost = false)`` | Moves the camera in its free-look mode using the requested local movement and speed modifier.               | ``localMovement`` — Camera movement in its current local view frame. ``lookDelta`` — Pointer/look delta. ``deltaTime`` — Elapsed time in seconds supplied by the owning loop. ``boost`` — Fast-move modifier. Default: ``false``. |
-+---------------------------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-api-camera--events-and-inspector-callbacks:
-
-Events and Inspector callbacks
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-+------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------+
-| Declaration                                                      | Trigger, payload and meaning                                                                                                                    |
-+==================================================================+=================================================================================================================================================+
-| ``public event System.Action<ViewMode> ModeChanged``             | After the declaring component's selected mode changes. Payload: its mode enum.                                                                  |
-+------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<Transform> TargetChanged``          | When the orbit camera's follow target changes. Payload: ``Transform``, possibly ``null``.                                                       |
-+------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Func<Vector2, bool> PointerCaptureFilter`` | Pointer-capture query rather than a notification. Each Func receives screen position and returns permission; a ``false`` result vetoes capture. |
-+------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-api-camera--state-and-configuration:
+.. _evs-api-camera--state-and-configuration-3:
 
 State and configuration
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Member                                                                        | Meaning                                                                                                                                                                                        |
-+===============================================================================+================================================================================================================================================================================================+
-| ``public Transform target``                                                   | Authored target used by ``OrbitCamera``.                                                                                                                                                       |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public ViewMode mode``                                                      | Authored mode used by ``OrbitCamera``. Initial value: ``ViewMode.Orbit``.                                                                                                                      |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public Transform interiorMount``                                            | Optional explicit driver-eye mount; otherwise Interior Camera on the selected vehicle is used.                                                                                                 |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public Vector3 interiorFallbackOffset``                                     | Authored interior fallback offset used by ``OrbitCamera``. Initial value: ``new Vector3(-.35f, 1.25f, .25f)``.                                                                                 |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float cinematicHeight``                                              | Authored cinematic height used by ``OrbitCamera``. Initial value: ``2.2f``.                                                                                                                    |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float cinematicResponse``                                            | Authored cinematic response used by ``OrbitCamera``. Initial value: ``4``.                                                                                                                     |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float freeLookSpeed``                                                | Authored free look speed used by ``OrbitCamera``. Initial value: ``2f``.                                                                                                                       |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float freeLookResponse``                                             | Authored free look response used by ``OrbitCamera``. Initial value: ``12``.                                                                                                                    |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float freeLookBoost``                                                | Authored free look boost used by ``OrbitCamera``. Initial value: ``4``.                                                                                                                        |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool IsFreeCamera { get; }``                                 | Current is free camera predicate; read it instead of maintaining a second application flag.                                                                                                    |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual string ViewLabel { get; }``                                  | Read-only/resolved view label for ``OrbitCamera``.                                                                                                                                             |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float distance``                                                     | Authored distance used by ``OrbitCamera``. Initial value: ``7``.                                                                                                                               |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float focusHeight``                                                  | Authored focus height used by ``OrbitCamera``. Initial value: ``1.1f``.                                                                                                                        |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float maximumDistance``                                              | Authored maximum distance used by ``OrbitCamera``. Initial value: ``65``.                                                                                                                      |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float minimumDistance``                                              | Authored minimum distance used by ``OrbitCamera``. Initial value: ``1.5f``.                                                                                                                    |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float interiorLookAngle``                                            | Authored interior look angle used by ``OrbitCamera``. Initial value: ``180``.                                                                                                                  |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float sensitivity``                                                  | Authored sensitivity used by ``OrbitCamera``. Initial value: ``0.15f``.                                                                                                                        |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float zoomSensitivity``                                              | Camera distance change in metres per normalized scroll unit.                                                                                                                                   |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public float followResponse``                                               | Authored follow response used by ``OrbitCamera``. Initial value: ``12``.                                                                                                                       |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public LayerMask obstructionMask``                                          | Authored obstruction mask used by ``OrbitCamera``. Initial value: ``~0``.                                                                                                                      |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual System.Func<Vector2, bool> CanCapturePointer { get; set; }`` | Optional UI integration: return ``false`` to keep a click available to an overlay instead of locking orbit. Optional filter returning ``false`` when a UI overlay must keep the pointer click. |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool StartupCursorCapturePending { get; }``                  | Read-only/resolved startup cursor capture pending for ``OrbitCamera``.                                                                                                                         |
-+-------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| Member                                    | Meaning                                                                                         |
++===========================================+=================================================================================================+
+| ``public bool avoidObstacles``            | Retracts the orbit camera at scenery; ignores the owning vehicle and its detached damage parts. |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public float distance``                 | Requested orbit radius in metres.                                                               |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public virtual Vector3 Focus { get; }`` | Current world-space orbit focus.                                                                |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public Vector3 focusOffset``            | Local offset from the anchor. Use zero when the anchor is already at the intended orbit focus.  |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public float followResponse``           | Exponential rotation/radius smoothing response per second.                                      |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public float initialPitch``             | Additional starting pitch in degrees relative to the anchor pitch.                              |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public float initialYaw``               | Additional starting yaw in degrees relative to the anchor heading.                              |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public float maximumDistance``          | Largest zoom radius in metres.                                                                  |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public float minimumDistance``          | Smallest zoom radius in metres.                                                                 |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public LayerMask obstructionMask``      | Layers checked for camera obstructions; triggers are ignored.                                   |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public float obstructionRadius``        | Radius in metres used for the orbit sphere cast.                                                |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public Vector2 pitchLimits``            | Minimum and maximum pitch in degrees.                                                           |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
+| ``public float zoomSensitivity``          | Metres of radius change per normalized scroll unit.                                             |
++-------------------------------------------+-------------------------------------------------------------------------------------------------+
 
-.. _evs-api-camera--orbitcameraviewmode:
+.. _evs-api-camera--methods-3:
 
-OrbitCamera.ViewMode
---------------------
+Methods
+~~~~~~~
 
-**Runtime/World/Camera/OrbitCamera.cs**
-
-Defines the allowed view mode choices used by this topic.
-
-.. _evs-api-camera--values:
-
-Values
-~~~~~~
-
--  ``Orbit``
--  ``Interior``
--  ``Cinematic``
--  ``FreeLook``
--  ``FreeParent``
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| Signature                                                                                            | Role and behavior                                                                                                                                                                  | Arguments and result |
++======================================================================================================+====================================================================================================================================================================================+======================+
+| ``public override void RenderCamera(Camera view, Vector2 lookDelta, float scroll, float deltaTime)`` | Places the supplied camera using mouse delta, normalized scroll input and elapsed seconds. Called by Cameras; override it to implement a custom camera module.                     | —                    |
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public override void ResetView()``                                                                 | Resets look to its authored starting orientation. Cameras also places the attached camera immediately when controls and the selected submodule are enabled.                        | —                    |
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void SetLook(float yawDegrees, float pitchDegrees)``                                | Sets yaw and pitch in degrees, clamped to the configured pitch/yaw limits. Orbit yaw is a world heading; interior yaw is an anchor-relative offset. Non-finite inputs are ignored. | —                    |
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+
+| ``public virtual void Zoom(float amount)``                                                           | Changes desired radius using zoomSensitivity and distance limits; positive input zooms in. Non-finite input is ignored.                                                            | —                    |
++------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+

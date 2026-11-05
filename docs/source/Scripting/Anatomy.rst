@@ -1,7 +1,7 @@
-.. _evs-scripting-anatomy--authored-joint-and-ik-frames:
+.. _evs-scripting-anatomy--joint-and-ik-frames:
 
-Authored joint and IK frames
-============================
+Joint and IK frames
+===================
 
 Anatomy defines the coordinate frames and motion limits that make a humanoid rig usable by passenger physics and IK. The runtime needs to know not just where a bone is, but which axis bends it, how it connects to its parent and what motion is physically or anatomically permitted.
 
@@ -54,7 +54,7 @@ Use a simple validation progression: inspect the neutral pose, move one joint th
 
 When creating a rig variant, preserve the relation between reference rotations, collider dimensions and bone proportions. Finger pad dimensions and flexion axes need the same attention as the large limbs because grip fitting measures that geometry rather than guessing a pose from bone names.
 
-Tune actual ``ConfigurableJoint`` components after authoring. Running **``Configure`` anatomical joints** again replaces values with the selected authoring preset. Do not leave a second competing ``CharacterJoint`` on the same physical link.
+Tune actual ``ConfigurableJoint`` components after authoring. Running **Configure anatomical joints** again replaces values with the selected authoring preset. Do not leave a second competing ``CharacterJoint`` on the same physical link.
 
 Locked angular axes and limited axes have distinct semantics. A numerical angle range is not an independent Cartesian Euler box; it is interpreted in the joint's configured native frame. Finger fitting additionally uses calibrated phalanx axes and pad geometry.
 
@@ -65,7 +65,7 @@ Inspect saved native joint connections
 
 A useful first diagnostic for a character prefab is to find joints that are not connected to another body. A world-connected joint may be intentional, but it deserves inspection before using the rig as a freely moving passenger. The component below only reports configuration; it does not author or overwrite the skeleton.
 
-**Example: ``PassengerJointInfo.cs``**
+**Example:** ``PassengerJointInfo.cs``
 
 .. raw:: html
 
@@ -106,17 +106,51 @@ For a custom character, decide which path owns the pose before integrating it. D
 
 A different rig requires validating proportions, collision proxies, mass distribution and reachable contacts. Large support forces do not correct bad frames. See :doc:`passenger physics </Scripting/PassengerPhysics>`, :doc:`controller ownership </Scripting/PassengerControllers>` and :doc:`grip fitting </Scripting/GripSolving>`.
 
-.. _evs-scripting-anatomy--complete-public-method-and-event-index:
+.. _evs-scripting-anatomy--modify-a-joint-by-id:
 
-Complete public method and event index
---------------------------------------
+Modify a joint by ID
+--------------------
 
-The lists below cover public methods and events for this topic and their package base contracts. Signatures include overloads. See :doc:`the detailed anatomical references API </API/Anatomy>` for arguments, return semantics, state and configuration. An override replaces the matching inherited implementation; it is not an additional call to make.
+Joint IDs belong to each HumanoidPassenger.anatomicalJoints entry. They are unique within that passenger, case-sensitive and editable through jointId. The authoring tool derives defaults from parent-to-child bone connections and preserves existing IDs. For an existing rig, use **Assign missing joint IDs** in its Inspector without resetting native tuning.
+
+.. raw:: html
+
+   <!-- example: NamedAnatomicalJoint.cs -->
+
+.. code-block:: csharp
+
+   using EasyVehicleSystem;
+   using UnityEngine;
+
+   public sealed class NamedAnatomicalJoint : MonoBehaviour
+   {
+       public HumanoidPassenger passenger;
+       public string jointId = "LeftForearmToLeftHand";
+       [Range(0, 90)] public float sidewaysLimit = 15;
+
+       public bool ApplyLimit()
+       {
+           return passenger && passenger.UpdateAnatomicalJoint(jointId, joint => {
+               var limit = joint.angularYLimit;
+               limit.limit = sidewaysLimit;
+               joint.angularYMotion = ConfigurableJointMotion.Limited;
+               joint.angularYLimit = limit;
+           });
+       }
+
+       public ConfigurableJoint FindJoint() => passenger ? passenger.GetAnatomicalJoint(jointId) : null;
+   }
+
+GetAnatomicalJoint returns null for an unresolved ID. TryGetAnatomicalJoint returns false and a null output; TryGetAnatomicalJointDefinition does the same for the saved metadata entry. Empty/whitespace IDs, duplicate IDs and destroyed references fail safely. ID changes take effect immediately; no cache rebuild is needed. Lookups do not allocate.
+
+UpdateAnatomicalJoint returns false without calling the callback for an unresolved ID or null callback. On success it refreshes native anchors, axes and limits in that entry's cached anatomy data, including the limits read by IK. If the callback throws, its exception propagates after the cache refresh; there is no rollback. A capturing lambda may allocate, so cache the callback when using it repeatedly in a hot loop. If you mutate a retrieved joint directly, call ReadAnatomicalJointSettings afterward to refresh the anatomy cache.
+
+Use runtime updates for tuning existing joints. Changing connections, replacing components or redefining reference axes while occupied requires coordinating the rig's physics/IK ownership; ID lookup does not rebuild seated restraints or cached drive frames. Passenger state transitions may reapply their motor/damping settings. Runtime edits affect the live instance and do not save prefab overrides automatically.
 
 .. _evs-scripting-anatomy--editor-authoring:
 
 Editor authoring
-~~~~~~~~~~~~~~~~
+----------------
 
 ``HumanoidJointDefinition`` is a data contract with no public methods or events. Its complete fields are listed in :doc:`Anatomical references API </API/Anatomy>`.
 
@@ -127,3 +161,10 @@ Editor authoring
 +---------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 ``HumanoidAnatomyPresets`` and ``HumanoidJointLimits`` are implementation helpers rather than public extension APIs. For runtime character integration, use the public passenger body/controller and hand-pose contracts instead of calling those helpers.
+
+.. _evs-scripting-anatomy--complete-public-method-and-event-index:
+
+Complete public method and event index
+--------------------------------------
+
+The lists below cover public methods and events for this topic and their package base contracts. Signatures include overloads. See :doc:`the detailed anatomical references API </API/Anatomy>` for arguments, return semantics, state and configuration. An override replaces the matching inherited implementation; it is not an additional call to make.

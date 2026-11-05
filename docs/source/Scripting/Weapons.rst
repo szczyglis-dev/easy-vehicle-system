@@ -15,15 +15,15 @@ Implementation map
 +---------------------+-------------------------------------------------------------------------------+
 | Class               | Responsibility                                                                |
 +=====================+===============================================================================+
-| ``WeaponBarrel``    | Owns muzzle aiming, trigger/cooldown admission and projectile initialization. |
-+---------------------+-------------------------------------------------------------------------------+
-| ``RocketLauncher``  | Selects and launches configured mounted rocket stores.                        |
-+---------------------+-------------------------------------------------------------------------------+
-| ``Rocket``          | Owns launched-rocket motor, collision and lifetime behavior.                  |
+| ``DroppableObject`` | Detaches the actual payload and establishes released physics.                 |
 +---------------------+-------------------------------------------------------------------------------+
 | ``ObjectDropper``   | Validates selected payload release and cooldown.                              |
 +---------------------+-------------------------------------------------------------------------------+
-| ``DroppableObject`` | Detaches the actual payload and establishes released physics.                 |
+| ``Rocket``          | Owns launched-rocket motor, collision and lifetime behavior.                  |
++---------------------+-------------------------------------------------------------------------------+
+| ``RocketLauncher``  | Selects and launches configured mounted rocket stores.                        |
++---------------------+-------------------------------------------------------------------------------+
+| ``WeaponBarrel``    | Owns muzzle aiming, trigger/cooldown admission and projectile initialization. |
 +---------------------+-------------------------------------------------------------------------------+
 | ``WeaponEffects``   | Presents shot sound, flash and smoke.                                         |
 +---------------------+-------------------------------------------------------------------------------+
@@ -48,13 +48,13 @@ Initialize receives owner, initial velocity, impulse, lifetime and ignored owner
 A minimal custom projectile
 ---------------------------
 
-``IWeaponProjectile.Initialize`` is the handover from the barrel to the projectile. ``Apply`` the supplied initial velocity, impact impulse, lifetime and ignored-collider list in the implementation. A custom projectile can instead implement penetration, area effects or another flight model, but it must still own cleanup and respect its intended owner-contact policy.
+``IWeaponProjectile.Initialize`` is the handover from the barrel to the projectile. Apply the supplied initial velocity, impact impulse, lifetime and ignored-collider list in the implementation. A custom projectile can instead implement penetration, area effects or another flight model, but it must still own cleanup and respect its intended owner-contact policy.
 
 The example records an initial impact direction before native contact response can change velocity. Its ``hit`` guard ensures multiple collision callbacks do not apply the gameplay impulse repeatedly. The one-shot impulse is deliberately separate from a health/damage system; connect that application rule at the same accepted-impact boundary.
 
 Put this on a prefab with ``Rigidbody`` and a collider, then assign that component as Projectile Prefab. It applies an impulse once to a hit ``Rigidbody`` and destroys itself. Add game damage/scoring in the same impact path as needed.
 
-**Example: ``SimpleVehicleProjectile.cs``**
+**Example:** ``SimpleVehicleProjectile.cs``
 
 .. raw:: html
 
@@ -130,7 +130,7 @@ For a payload with a fuse, impact effect or lifetime, place that behavior on the
 
 ``ObjectDropper`` does not own an inventory. ``TryDrop`` accepts one eligible owned payload and starts its cooldown. ``DroppableObject`` detaches the actual object, creates/reuses a ``Rigidbody`` and applies inherited/separation velocity. It does not clone a replacement or auto-expire.
 
-**Example: ``PayloadReleaseControl.cs``**
+**Example:** ``PayloadReleaseControl.cs``
 
 .. raw:: html
 
@@ -179,12 +179,12 @@ DroppableObject
 | ``public event Action<DroppableObject> Dropped`` | After accepted payload release. Payload: released ``DroppableObject``; ``ObjectDropper`` also includes its own instance. |
 +--------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------+
 
-.. _evs-scripting-weapons--imodule:
+.. _evs-scripting-weapons--ivehiclemodule:
 
-IModule
-~~~~~~~
+IVehicleModule
+~~~~~~~~~~~~~~
 
-:ref:`IModule <evs-api-modules--imodule>` gives the full declared contract.
+:ref:`IVehicleModule <evs-api-modules--ivehiclemodule>` gives the full declared contract.
 
 +----------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------+
 | Method                                                                     | Role                                                                                                                        |
@@ -206,35 +206,6 @@ IWeaponProjectile
 +============================================================================================================================+=======================================================================================================================+
 | ``void Initialize(VehicleController owner, Vector3 velocity, float impulse, float lifetime, Collider[] ignoredColliders)`` | Accepts the projectile handover: owner, initial world velocity, impact impulse, lifetime and ignored owner colliders. |
 +----------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-
-.. _evs-scripting-weapons--module:
-
-Module
-~~~~~~
-
-:ref:`Module <evs-api-modules--module>` gives the full declared contract.
-
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| Method                                                                                    | Role                                                                                                                                   |
-+===========================================================================================+========================================================================================================================================+
-| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
-+-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
-
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| Event / callback                                                          | Role                                                                                                              |
-+===========================================================================+===================================================================================================================+
-| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
-| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
-+---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-weapons--objectdropper:
 
@@ -316,6 +287,35 @@ RocketLauncher
 +-------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
 | ``public event Action<RocketLauncher, Rocket> Fired`` | After an admitted shot creates/releases its projectile. Payload: weapon owner and spawned projectile/store component. |
 +-------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+
+.. _evs-scripting-weapons--vehiclemodule:
+
+VehicleModule
+~~~~~~~~~~~~~
+
+:ref:`VehicleModule <evs-api-modules--vehiclemodule>` gives the full declared contract.
+
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| Method                                                                                    | Role                                                                                                                                   |
++===========================================================================================+========================================================================================================================================+
+| ``public virtual void Configure(VehicleController vehicle)``                              | Empty base setup hook. Derived components may cache references/apply persistent settings; the controller owns lifecycle notifications. |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void Step(VehicleController vehicle, Command command, float deltaTime)`` | Empty base extension point. The controller schedules derived work and emits lifecycle notifications around it.                         |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual void SetEnabled(bool value)``                                            | Changes module enabled state and publishes an actual requested-flag change.                                                            |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+| ``public virtual bool SupportsProfile(DriveProfile profile)``                             | Checks movement-family compatibility; this is independent of the Unity enabled flag.                                                   |
++-------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------+
+
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| Event / callback                                                          | Role                                                                                                              |
++===========================================================================+===================================================================================================================+
+| ``public event System.Action<bool> EnabledChanged``                       | After ``SetEnabled`` changes the module flag. Payload: requested enabled bool; no event for an unchanged request. |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController> Configured``              | After controller-driven module configuration. Payload: the owning ``VehicleController``.                          |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
+| ``public event System.Action<VehicleController, Command, float> Stepped`` | After this registered module has stepped. Payload: vehicle, sampled Command, timestep in seconds.                 |
++---------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------+
 
 .. _evs-scripting-weapons--weaponbarrel:
 
