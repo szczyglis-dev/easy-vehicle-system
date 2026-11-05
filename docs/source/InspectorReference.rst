@@ -191,8 +191,6 @@ Chapters
 +---------------------------------------------------------------------------------------------------------------+------------------------------------------------+
 | :ref:`DemoPowerWindows <evs-inspectorreference-demo--demopowerwindows>`                                       | Demo components and examples                   |
 +---------------------------------------------------------------------------------------------------------------+------------------------------------------------+
-| :ref:`DemoProbeModule <evs-inspectorreference-demo--demoprobemodule>`                                         | Demo components and examples                   |
-+---------------------------------------------------------------------------------------------------------------+------------------------------------------------+
 | :ref:`DemoTowingControls <evs-inspectorreference-demo--demotowingcontrols>`                                   | Demo components and examples                   |
 +---------------------------------------------------------------------------------------------------------------+------------------------------------------------+
 | :ref:`DemoUnderwater <evs-inspectorreference-demo--demounderwater>`                                           | Demo components and examples                   |

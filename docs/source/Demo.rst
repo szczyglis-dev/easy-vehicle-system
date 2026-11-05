@@ -132,7 +132,7 @@ Free-camera movement: numpad 8 forward, 2/5 backward, 4/6 sideways, 9/3 up/down.
 Reuse the examples
 ------------------
 
-The sample's Prefabs folder contains the example vehicle configurations. Scripts/Examples contains application integrations such as ``LandingGearSwitch``, ``AimingHandExample``, ``DemoExternalControl`` and ``DemoDirectWaypointAI``.
+The sample's Prefabs folder contains the example vehicle configurations. ``Scripts`` is organized into ``Cameras``, ``Controls``, ``Environment``, ``UI`` and ``Vehicles``. These folders contain application integrations such as ``LandingGearSwitch``, ``AimingHandExample``, ``DemoExternalControl`` and ``DemoDirectWaypointAI``.
 
 See :doc:`Getting started </GettingStarted>` to build a vehicle, :doc:`Scripting </Scripting>` to integrate your game, and :doc:`Demo resources </DemoResources>` for asset bindings and credits.
 

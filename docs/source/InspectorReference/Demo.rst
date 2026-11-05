@@ -46,8 +46,6 @@ Demo components and examples
 +----------------------------------------------------------------------------------------------------------+------------------------+
 | :ref:`DemoPowerWindows <evs-inspectorreference-demo--demopowerwindows>`                                  | 6                      |
 +----------------------------------------------------------------------------------------------------------+------------------------+
-| :ref:`DemoProbeModule <evs-inspectorreference-demo--demoprobemodule>`                                    | 0                      |
-+----------------------------------------------------------------------------------------------------------+------------------------+
 | :ref:`DemoTowingControls <evs-inspectorreference-demo--demotowingcontrols>`                              | 1                      |
 +----------------------------------------------------------------------------------------------------------+------------------------+
 | :ref:`DemoUnderwater <evs-inspectorreference-demo--demounderwater>`                                      | 8                      |
@@ -72,7 +70,7 @@ AimingHandExample
 
 Tutorial: acquire a seated hand through ``vehicle.handles.TryAcquire``, move a stable palm target, then cancel the token after the visible return. The controller owns admission and restores the home binding. Place the custom handle under the vehicle; call ``vehicle.handles.Refresh()`` when adding it at runtime. The optional weapon and cursor handling belong to the application. Vehicle Handles supplies SetInput before passenger work.
 
-**Source:** ``Demo/Scripts/Examples/AimingHandExample.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Controls/AimingHandExample.cs``. Component / asset.
 
 **Inherited settings:** :ref:`VehicleHandle <evs-inspectorreference-world--vehiclehandle>`. These settings also appear on this type.
 
@@ -128,7 +126,7 @@ Audio Settings
 DemoAircraftSystems
 -------------------
 
-**Source:** ``Demo/Scripts/Examples/DemoAircraftSystems.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Vehicles/DemoAircraftSystems.cs``. Component / asset.
 
 +-----------------+---------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------+-------------------------------------------+
 | Setting         | Type                                                                                  | Description                                                                                                                              | Declared default and constraints          |
@@ -155,7 +153,7 @@ DemoAnimatorCar
 
 Select the F11 Car example and use its left-side panel in Play Mode to compare animated, IK and physical passenger ownership. Configure the driver seat with Parent attachment; wire the dedicated controller, wheel visual and three interactions below.
 
-**Source:** ``Demo/Scripts/DemoAnimatorCar.cs``. Demo component.
+**Source:** ``Demo/Scripts/Vehicles/DemoAnimatorCar.cs``. Demo component.
 
 +-----------------+-------------------------------+-------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting         | Type                          | Description                                                                                                                         | Declared default and constraints |
@@ -186,7 +184,7 @@ DemoCameraRig
 
 Demo view routing and cursor capture. All camera placement is handled by Cameras submodules.
 
-**Source:** ``Demo/Scripts/DemoCameraRig.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Cameras/DemoCameraRig.cs``. Component / asset.
 
 +------------+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting    | Type          | Description                                                                                                                                                                                                                                 | Declared default and constraints |
@@ -203,7 +201,7 @@ DemoCinematicCamera
 
 A custom camera can also ignore mouse look and follow the vehicle's heading instead.
 
-**Source:** ``Demo/Scripts/Examples/DemoCinematicCamera.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Cameras/DemoCinematicCamera.cs``. Component / asset.
 
 **Inherited settings:** :ref:`CameraModule <evs-inspectorreference-world--cameramodule>`. These settings also appear on this type.
 
@@ -232,7 +230,7 @@ A custom camera can also ignore mouse look and follow the vehicle's heading inst
 DemoControlsHud
 ---------------
 
-**Source:** ``Demo/Scripts/DemoControlsHud.cs``. Component / asset.
+**Source:** ``Demo/Scripts/UI/DemoControlsHud.cs``. Component / asset.
 
 No additional Inspector settings are declared on this type. Use the inherited settings above and the component enabled checkbox where available.
 
@@ -241,7 +239,7 @@ No additional Inspector settings are declared on this type. Use the inherited se
 DemoDamageControls
 ------------------
 
-**Source:** ``Demo/Scripts/DemoDamageControls.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Controls/DemoDamageControls.cs``. Component / asset.
 
 +--------------+--------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting      | Type                                                                                       | Description                                                                                                                                | Declared default and constraints |
@@ -256,7 +254,7 @@ DemoDayNight
 
 Sample lighting switch. It changes the environment without modifying a vehicle's requested light state.
 
-**Source:** ``Demo/Scripts/DemoDayNight.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Environment/DemoDayNight.cs``. Component / asset.
 
 +-------------+-----------+-----------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting     | Type      | Description                                                                                                                             | Declared default and constraints |
@@ -275,7 +273,7 @@ DemoDirectWaypointAI
 
 Pose-driven companion to DemoWaypointAI. No wheel forces or Rigidbody pose writes.
 
-**Source:** ``Demo/Scripts/Examples/DemoDirectWaypointAI.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Vehicles/DemoDirectWaypointAI.cs``. Component / asset.
 
 +----------------------+----------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------+
 | Setting              | Type                                                                                         | Description                                                                                                                                                             | Declared default and constraints                                          |
@@ -304,7 +302,7 @@ DemoDownforceModule
 
 Optional extension example: add this module through the controller dashboard to apply speed-based downforce.
 
-**Source:** ``Demo/Scripts/Examples/DemoDownforceModule.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Vehicles/DemoDownforceModule.cs``. Component / asset.
 
 **Inherited settings:** :ref:`PhysicsModule <evs-inspectorreference-physics--physicsmodule>`. These settings also appear on this type.
 
@@ -321,7 +319,7 @@ DemoEngineAudioMode
 
 The demo maps the selected movement slot to the sound item's matching ID.
 
-**Source:** ``Demo/Scripts/DemoEngineAudioMode.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Vehicles/DemoEngineAudioMode.cs``. Component / asset.
 
 No additional Inspector settings are declared on this type. Use the inherited settings above and the component enabled checkbox where available.
 
@@ -332,7 +330,7 @@ DemoExternalControl
 
 Demo ownership policy; the runtime controller itself has no concept of a player or AI.
 
-**Source:** ``Demo/Scripts/Examples/DemoExternalControl.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Controls/DemoExternalControl.cs``. Component / asset.
 
 +----------------------+---------------------------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting              | Type                                                                                              | Description                                                                                                                               | Declared default and constraints |
@@ -349,7 +347,7 @@ Demo ownership policy; the runtime controller itself has no concept of a player 
 DemoExternalControl.GizmoSettings
 ---------------------------------
 
-**Source:** ``Demo/Scripts/Examples/DemoExternalControl.cs``. Nested configuration data; expand its owning field in the Inspector.
+**Source:** ``Demo/Scripts/Controls/DemoExternalControl.cs``. Nested configuration data; expand its owning field in the Inspector.
 
 +----------------------+----------+--------------------------------------------------------------------+----------------------------------+
 | Setting              | Type     | Description                                                        | Declared default and constraints |
@@ -370,7 +368,7 @@ DemoExternalControl.GizmoSettings
 DemoFreeCamera
 --------------
 
-**Source:** ``Demo/Scripts/Examples/DemoFreeCamera.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Cameras/DemoFreeCamera.cs``. Component / asset.
 
 **Inherited settings:** :ref:`DemoFreeCameraMotion <evs-inspectorreference-demo--demofreecameramotion>`. These settings also appear on this type.
 
@@ -383,7 +381,7 @@ DemoFreeCameraMotion
 
 Custom camera example: add beside Cameras, assign it with SetModule/Attach, then SetActive(true). This component belongs to the optional Demo, not the runtime package.
 
-**Source:** ``Demo/Scripts/Examples/DemoFreeCameraMotion.cs``. Abstract base; settings are inherited by derived components.
+**Source:** ``Demo/Scripts/Cameras/DemoFreeCameraMotion.cs``. Abstract base; settings are inherited by derived components.
 
 **Inherited settings:** :ref:`CameraModule <evs-inspectorreference-world--cameramodule>`. These settings also appear on this type.
 
@@ -404,7 +402,7 @@ DemoFreeParentCamera
 
 A second custom view reuses navigation but keeps its pose in the vehicle anchor's frame. Each vehicle owns its own module and therefore remembers its own local camera pose.
 
-**Source:** ``Demo/Scripts/Examples/DemoFreeParentCamera.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Cameras/DemoFreeParentCamera.cs``. Component / asset.
 
 **Inherited settings:** :ref:`DemoFreeCameraMotion <evs-inspectorreference-demo--demofreecameramotion>`. These settings also appear on this type.
 
@@ -417,7 +415,7 @@ DemoHud
 
 Example HUD consuming the public immutable telemetry API, with no dependency on physics internals.
 
-**Source:** ``Demo/Scripts/DemoHud.cs``. Component / asset.
+**Source:** ``Demo/Scripts/UI/DemoHud.cs``. Component / asset.
 
 +------------------------+----------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting                | Type                                                                                         | Description                                                                                                                                                               | Declared default and constraints |
@@ -438,7 +436,7 @@ DemoPassengerAccess
 
 Explicit demo selection; runtime access never searches for a player or reads a keyboard.
 
-**Source:** ``Demo/Scripts/DemoPassengerAccess.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Controls/DemoPassengerAccess.cs``. Component / asset.
 
 +------------------------+---------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting                | Type                                                                                              | Description                                                                                                                                             | Declared default and constraints |
@@ -457,7 +455,7 @@ DemoPowerWindows
 
 Example consumer: all mechanics live in MovingPart; this script only supplies held input.
 
-**Source:** ``Demo/Scripts/DemoPowerWindows.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Controls/DemoPowerWindows.cs``. Component / asset.
 
 +-----------------+------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting         | Type                                                                         | Description                                                                                                                           | Declared default and constraints |
@@ -475,19 +473,6 @@ Example consumer: all mechanics live in MovingPart; this script only supplies he
 | ``rightWindow`` | ``MovingPart`` (:ref:`fields <evs-inspectorreference-exterior--movingpart>`) | MovingPart that slides the right window. It has independent up/down keys so either window can be moved without the other.             | ``None / unassigned``            |
 +-----------------+------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 
-.. _evs-inspectorreference-demo--demoprobemodule:
-
-DemoProbeModule
----------------
-
-Small executable API example used by integration verification; not attached to the shipped vehicles.
-
-**Source:** ``Demo/Scripts/Examples/DemoProbeModule.cs``. Component / asset.
-
-**Inherited settings:** :ref:`PhysicsModule <evs-inspectorreference-physics--physicsmodule>`. These settings also appear on this type.
-
-No additional Inspector settings are declared on this type. Use the inherited settings above and the component enabled checkbox where available.
-
 .. _evs-inspectorreference-demo--demotowingcontrols:
 
 DemoTowingControls
@@ -495,7 +480,7 @@ DemoTowingControls
 
 Player key binding stays in the sample; gameplay and AI call Coupler directly.
 
-**Source:** ``Demo/Scripts/DemoTowingControls.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Controls/DemoTowingControls.cs``. Component / asset.
 
 +--------------+--------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting      | Type                                                                                       | Description                                                                                         | Declared default and constraints |
@@ -510,7 +495,7 @@ DemoUnderwater
 
 Camera-local underwater atmosphere. Restore the current day/night settings after rendering.
 
-**Source:** ``Demo/Scripts/DemoUnderwater.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Environment/DemoUnderwater.cs``. Component / asset.
 
 +-----------------------+---------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting               | Type                                                                            | Description                                                                                                                                                                 | Declared default and constraints |
@@ -539,7 +524,7 @@ DemoVehicleSelector
 
 Demo-only player selection. Inactive demo cars receive parking input; the runtime package makes no player-count assumptions.
 
-**Source:** ``Demo/Scripts/DemoVehicleSelector.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Vehicles/DemoVehicleSelector.cs``. Component / asset.
 
 +------------------+------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting          | Type                                                                                           | Description                                                                                                                                                                                        | Declared default and constraints |
@@ -564,7 +549,7 @@ DemoVehicleWeapon
 
 Example of adding vehicle-specific controls/HUD without extending Command or the controller.
 
-**Source:** ``Demo/Scripts/Examples/DemoVehicleWeapon.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Vehicles/DemoVehicleWeapon.cs``. Component / asset.
 
 +-----------------+-------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting         | Type                                                                          | Description                                                                                                                                   | Declared default and constraints |
@@ -593,7 +578,7 @@ DemoWaterEntryAudio
 
 Demo-only water entry/exit for any vehicle, independently of its drive profile.
 
-**Source:** ``Demo/Scripts/DemoWaterEntryAudio.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Environment/DemoWaterEntryAudio.cs``. Component / asset.
 
 +-----------------------+---------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting               | Type                                                                            | Description                                                                                                                                                                           | Declared default and constraints |
@@ -645,7 +630,7 @@ DemoWaypointAI
 
 Small public-API example: steering and speed control only; no navigation or obstacle avoidance.
 
-**Source:** ``Demo/Scripts/Examples/DemoWaypointAI.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Vehicles/DemoWaypointAI.cs``. Component / asset.
 
 +------------------------------+------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------+
 | Setting                      | Type                                                                                           | Description                                                                                                                                                    | Declared default and constraints                                          |
@@ -678,7 +663,7 @@ LandingGearSwitch
 
 Application binding example: connect SwitchAnimator to LandingGear. Assign the gear, animator and seat. The binding samples deployment requests in LateUpdate; SwitchAnimator owns switch motion and its SwitchHandle owns the left-hand contact. Actual limb arrival gates switch motion through ControlAnimator.
 
-**Source:** ``Demo/Scripts/Examples/LandingGearSwitch.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Controls/LandingGearSwitch.cs``. Component / asset.
 
 +---------------------+---------------------------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting             | Type                                                                            | Description                                                                                                                                                       | Declared default and constraints |
@@ -697,7 +682,7 @@ Application binding example: connect SwitchAnimator to LandingGear. Assign the g
 Projectile
 ----------
 
-**Source:** ``Demo/Scripts/Examples/Projectile.cs``. Component / asset.
+**Source:** ``Demo/Scripts/Vehicles/Projectile.cs``. Component / asset.
 
 +----------------------------------+----------+-----------------------------------------------------------------------------------------------------------------------------------+----------------------------------+
 | Setting                          | Type     | Description                                                                                                                       | Declared default and constraints |
