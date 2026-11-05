@@ -66,6 +66,15 @@ Use :ref:`TireSurfaceProfile <evs-surfaces--rolling-activity-versus-skid-activit
 
 When feedback/contact becomes unavailable, emission is stopped rather than preserving an old skid forever. Existing particles may still finish their lifetime. Disabling emission is different from immediately clearing every particle in a supplied system.
 
+.. _evs-particles--standing-burnout:
+
+Standing burnout
+~~~~~~~~~~~~~~~~
+
+Under **Tire Smoke > Standing Burnout**, leave **Smoke Mode** on Automatic to detect strong wheelspin at low road-relative speed. **Burnout Smoke** sets thresholds, buildup, rate, lifetime and size. A separate world-space emitter builds a cloud around the tire circumference, gradually replacing contact-patch emission; existing particles fade naturally. Locked/airborne wheels, granular surfaces and disabled surface particles do not qualify.
+
+Choose Contact Patch for ordinary smoke or Tire Ring to request the cloud while the grounded tire has particle activity. Custom skid systems keep their appearance. Runtime switching and notifications are covered in :ref:`Particle ownership <evs-scripting-presentation--particle-ownership>`.
+
 .. _evs-particles--exhaust:
 
 Exhaust
