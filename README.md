@@ -30,16 +30,16 @@ Vehicle mechanics are independent of the render pipeline. The supplied demo uses
 
 ## Start building
 
-Read [Introduction and quick start](docs/source/Introduction.rst) for the setup sequence and full guide index, or go directly to [Getting started](docs/source/GettingStarted.rst).
+Read [Introduction and quick start](manual/Introduction.md) for the setup sequence and full guide index, or go directly to [Getting started](manual/GettingStarted.md).
 
-Explore the [demo vehicles](docs/source/Demo.rst), browse the [scripting reference](docs/source/Scripting/index.rst) and [public API](docs/source/API.rst), or consult [Troubleshooting](docs/source/Troubleshooting.rst). See [Installation and included content](docs/source/Distribution.rst) for import instructions and included folders.
+Explore the [demo vehicles](manual/Demo.md), browse the [scripting reference](manual/Scripting/README.md) and [public API](manual/API.md), or consult [Troubleshooting](manual/Troubleshooting.md). See [Installation and included content](manual/Distribution.md) for import instructions and included folders.
 
 ## Links
 
 - GitHub, docs, issues, changelog: [Easy Vehicle System on GitHub](https://github.com/szczyglis-dev/easy-vehicle-system)
 - Documentation: [Online manual](https://easyvehiclesystem.readthedocs.io/en/latest/)
-- License: [LICENSE.md](https://github.com/szczyglis-dev/easy-vehicle-system/LICENSE.md)
-- Changelog: [CHANGELOG.md](https://github.com/szczyglis-dev/easy-vehicle-system/CHANGELOG.md)
+- License: [LICENSE.md](LICENSE.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
 
 ## Author
 
@@ -47,8 +47,8 @@ Marcin Szczygliński (szczyglis83@gmail.com)
 
 ## Complete Inspector reference
 
-[All component settings](docs/source/InspectorReference.rst) — descriptions, declared defaults, Inspector limits, inherited settings and nested configuration for every package system and the demo components.
+[All component settings](manual/InspectorReference.md) — descriptions, declared defaults, Inspector limits, inherited settings and nested configuration for every package system and the demo components.
 
 ## Demo credits
 
-Authors, licenses and available source URLs for the models and audio used in the demo are listed in [Credits](docs/Credits.md) and the documentation’s [Third-party credits](docs/source/ThirdParty.rst).
+Authors, licenses and available source URLs for the models and audio used in the demo are listed in [Credits](manual/Credits.md) and the documentation’s [Third-party credits](manual/ThirdParty.md).

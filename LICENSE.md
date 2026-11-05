@@ -26,8 +26,8 @@ Sources, authors and recorded license information are provided in the accompanyi
 - `Demo/Audio/Credits.md` and recording-local notices: demo audio.
 - `Demo/Audio/Surfaces/Credits.md`: tire-surface audio.
 - `Resources/Audio/Credits.md`: bundled reusable audio defaults.
-- `Documentation~/ThirdParty.md` (UPM) or `Documentation/ThirdParty.md` (Asset Store import): guide to the notices.
+- [Third-party credits](manual/ThirdParty.md): guide to the notices.
 
-For UPM, the bundled sample is located in `Samples~/Demo` before import; its imported location is under `Assets/Samples/Easy Vehicle System/<version>/Demo`. In the Asset Store layout, Demo and Runtime are located under `Assets/Szczyglis/EasyVehicleSystem`.
+In the Asset Store distribution, the package and its Demo are imported under `Assets/Szczyglis/EasyVehicleSystem`. Paths to asset-local notices above are relative to that folder. This documentation repository does not include the complete package assets; see [the manual](manual/README.md) and [installation guide](manual/Distribution.md).
 
 The notices identify content under CC0, CC BY and other source-specific terms. Follow the applicable license for each asset, including attribution and notice requirements. Retain the relevant copyright, license and attribution notices when redistributing content where its license permits redistribution. Inclusion in this package does not grant additional rights to third-party content or associated trademarks. Where license information is missing or unclear, obtain permission from the relevant rights holder before reuse or redistribution.
