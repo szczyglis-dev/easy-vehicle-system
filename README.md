@@ -1,8 +1,11 @@
+
 # Easy Vehicle System
 
 Easy Vehicle System is a modular vehicle package for Unity. It provides ready-to-use movement, physics and control systems for ground, air and water vehicles, with configurable passengers, interactive controls, damage and effects. Use it to build vehicles for your game with your own models, input and gameplay rules, or start from the supplied examples.
 
 **Full documentation:** https://easyvehiclesystem.readthedocs.io/en/latest/
+
+<img width="1950" height="1300" alt="cover" src="https://github.com/user-attachments/assets/1b2174fe-5216-4eed-89ba-d636085c3a0b" />
 
 ## Version and compatibility
 
